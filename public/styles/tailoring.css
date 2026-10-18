@@ -1,0 +1,7 @@
+.tailoring-page .profile-hero {
+  background: linear-gradient(135deg, rgba(29,25,23,0.8), rgba(117,75,55,0.36));
+}
+
+.tailoring-page .btn-primary {
+  background: linear-gradient(135deg, #d49771, #a55d43);
+}

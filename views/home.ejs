@@ -1,0 +1,264 @@
+<%- include('partials/head') %>
+<%- include('partials/header') %>
+
+<div class="intro-overlay" id="introOverlay" aria-live="polite">
+  <div class="intro-panel">
+    <p class="eyebrow">Craft & Current</p>
+    <h1>Welcome and have access to premium services</h1>
+    <button class="btn btn-primary" id="skipIntro" type="button">Skip introduction</button>
+  </div>
+</div>
+
+<main>
+  <section class="hero hero-home">
+    <div class="hero-backdrop"></div>
+    <div class="container hero-inner">
+      <div class="hero-copy reveal">
+        <p class="eyebrow">Professional craftsmanship</p>
+        <h1>Premium service, honest work and dependable results.</h1>
+        <p class="lede">From electrical installations and repairs to bespoke tailoring and digital solutions, our platform connects clients with reliable professionals and real expertise.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="#contact">Request a service</a>
+          <a class="btn btn-secondary" href="/electrician">Meet the electrician</a>
+        </div>
+      </div>
+      <div class="hero-card reveal">
+        <div class="mini-card">
+          <span class="label">Available</span>
+          <strong>Residential & commercial projects</strong>
+        </div>
+        <div class="mini-card">
+          <span class="label">Custom solutions</span>
+          <strong>Bespoke tailoring & digital services</strong>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section intro-professionals">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Who we serve</p>
+        <h2>Two specialists. One trusted platform.</h2>
+      </div>
+      <div class="dual-grid">
+        <article class="info-card reveal">
+          <div class="card-icon">E</div>
+          <h3>Electrical services</h3>
+          <p>Safe, efficient installations, repairs and maintenance for homes, rentals and businesses.</p>
+          <a href="/electrician">View electrician profile</a>
+        </article>
+        <article class="info-card reveal">
+          <div class="card-icon">T</div>
+          <h3>Tailoring & fashion</h3>
+          <p>Bespoke garments, alterations and finishing that balance style, comfort and a precise fit.</p>
+          <a href="/tailoring">View tailoring profile</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section services-overview">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Core services</p>
+        <h2>Crafted for real household and business needs</h2>
+      </div>
+      <div class="service-stack">
+        <article class="service-panel reveal">
+          <div>
+            <span class="panel-tag">Electrical</span>
+            <h3>Electrical Services</h3>
+            <ul>
+              <li>Residential wiring and rewiring</li>
+              <li>Fault diagnosis and repairs</li>
+              <li>Lighting and socket installations</li>
+              <li>Electrical maintenance</li>
+            </ul>
+          </div>
+          <a href="/electrician" class="text-link">Explore electrician services</a>
+        </article>
+        <article class="service-panel reveal">
+          <div>
+            <span class="panel-tag alt">Tailoring</span>
+            <h3>Tailoring & Fashion</h3>
+            <ul>
+              <li>Custom garments</li>
+              <li>Alterations and fittings</li>
+              <li>Repair and hemming</li>
+              <li>Bespoke dressmaking</li>
+            </ul>
+          </div>
+          <a href="/tailoring" class="text-link">Explore tailoring services</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section portfolio-highlight">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Selected work</p>
+        <h2>Projects and garment highlights</h2>
+      </div>
+      <div class="project-grid">
+        <% allProjects.slice(0, 4).forEach((project) => { %>
+          <article class="project-card reveal">
+            <div class="project-image" style="background-image: url('<%= project.image %>');"></div>
+            <div class="project-copy">
+              <span class="panel-tag"><%= project.category || 'Project' %></span>
+              <h3><%= project.title %></h3>
+              <p><%= project.description %></p>
+            </div>
+          </article>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+
+  <section class="section credentials">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Credentials</p>
+        <h2>Professional focus and practical experience</h2>
+      </div>
+      <div class="credentials-grid">
+        <div class="credential-card reveal">
+          <strong>7+ years</strong>
+          <span>Electrical experience</span>
+        </div>
+        <div class="credential-card reveal">
+          <strong>6+ years</strong>
+          <span>Tailoring & fitting expertise</span>
+        </div>
+        <div class="credential-card reveal">
+          <strong>Verified details</strong>
+          <span>Profiles updated by owner</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section why-us">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Why work with us</p>
+        <h2>Professional standards, clear communication and long-term value</h2>
+      </div>
+      <div class="feature-grid">
+        <article class="feature-card reveal">
+          <h3>Craftsmanship</h3>
+          <p>Careful work, clean finishing and attention to detail in every project.</p>
+        </article>
+        <article class="feature-card reveal">
+          <h3>Communication</h3>
+          <p>Clear updates, honest guidance and practical next steps for each job.</p>
+        </article>
+        <article class="feature-card reveal">
+          <h3>Reliability</h3>
+          <p>Dependable scheduling and professional service for homes and businesses.</p>
+        </article>
+        <article class="feature-card reveal">
+          <h3>Quality</h3>
+          <p>Focused on safe, durable and well-finished outcomes that last.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section process">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">How it works</p>
+        <h2>Request a service in a few simple steps</h2>
+      </div>
+      <div class="steps-grid">
+        <div class="step reveal">
+          <span>01</span>
+          <h3>Share your need</h3>
+          <p>Tell us what you need and where the work is taking place.</p>
+        </div>
+        <div class="step reveal">
+          <span>02</span>
+          <h3>Review the fit</h3>
+          <p>We discuss scope, timing and the best approach for your project.</p>
+        </div>
+        <div class="step reveal">
+          <span>03</span>
+          <h3>Confirm and proceed</h3>
+          <p>Once approved, the work begins with clear communication and a dependable outcome.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section testimonials">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Testimonials</p>
+        <h2>Feedback is currently being collected</h2>
+      </div>
+      <div class="testimonial-empty reveal">
+        <p>There are no customer testimonials yet. When verified feedback becomes available, it will be published here.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact" class="section contact-section">
+    <div class="container contact-grid">
+      <div class="contact-card reveal">
+        <p class="eyebrow">Contact</p>
+        <h2>Request a quote or discuss your project.</h2>
+        <ul class="contact-list">
+          <li><a href="tel:0721909801">Phone: 0721909801</a></li>
+          <li><a href="sms:0721909801">SMS</a></li>
+          <li><a href="https://wa.me/254721909801" target="_blank" rel="noreferrer">WhatsApp</a></li>
+          <li><a href="mailto:hello@craftandcurrent.co.ke">Email</a></li>
+        </ul>
+      </div>
+
+      <form class="enquiry-form reveal" method="POST" action="/enquiry">
+        <input type="hidden" name="role" value="electrician" />
+        <div class="field-grid">
+          <label>
+            <span>Your name</span>
+            <input type="text" name="customer_name" placeholder="Your name" required />
+          </label>
+          <label>
+            <span>Contact method</span>
+            <select name="contact_method">
+              <option value="Phone">Phone</option>
+              <option value="SMS">SMS</option>
+              <option value="WhatsApp">WhatsApp</option>
+              <option value="Email">Email</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span>Subject</span>
+          <input type="text" name="subject" placeholder="Electrical repair or tailoring request" required />
+        </label>
+        <label>
+          <span>Project details</span>
+          <textarea name="message" rows="5" placeholder="Please share your project details..." required></textarea>
+        </label>
+        <div class="field-grid">
+          <label>
+            <span>Preferred date</span>
+            <input type="date" name="date" />
+          </label>
+          <label>
+            <span>Budget</span>
+            <input type="text" name="budget" placeholder="Optional" />
+          </label>
+        </div>
+        <button type="submit" class="btn btn-primary">Send enquiry</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<%- include('partials/footer') %>
+<script src="/js/main.js"></script>
+</body>
+</html>

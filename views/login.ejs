@@ -1,0 +1,36 @@
+<%- include('partials/head') %>
+<%- include('partials/header') %>
+
+<main class="auth-page">
+  <div class="container auth-shell">
+    <form class="auth-form reveal" method="POST" action="/login">
+      <p class="eyebrow">Secure access</p>
+      <h1>Professional dashboard login</h1>
+
+      <% if (error) { %>
+        <div class="form-message error"><%= error %></div>
+      <% } %>
+
+      <label>
+        <span>Role</span>
+        <select name="role" required>
+          <option value="electrician">Electrician</option>
+          <option value="tailor">Tailor</option>
+          <option value="developer">Developer</option>
+        </select>
+      </label>
+
+      <label>
+        <span>Password</span>
+        <input type="password" name="password" required />
+      </label>
+
+      <button class="btn btn-primary" type="submit">Log in</button>
+    </form>
+  </div>
+</main>
+
+<%- include('partials/footer') %>
+<script src="/js/main.js"></script>
+</body>
+</html>

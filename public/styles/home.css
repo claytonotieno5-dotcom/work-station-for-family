@@ -1,0 +1,65 @@
+.intro-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17,15,13,0.94);
+  z-index: 60;
+  transition: opacity 0.6s ease, visibility 0.6s ease;
+}
+
+.intro-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.intro-panel {
+  text-align: center;
+  max-width: 42rem;
+  padding: 2rem;
+}
+
+.intro-panel h1 {
+  font-size: clamp(2.5rem, 7vw, 5rem);
+}
+
+.info-card {
+  padding: 2rem;
+}
+
+.info-card .card-icon {
+  width: 3rem;
+  height: 3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(185,138,74,0.14);
+  color: var(--gold);
+  font-weight: 800;
+  margin-bottom: 1rem;
+}
+
+.info-card a {
+  margin-top: 1rem;
+  color: var(--gold);
+  display: inline-block;
+}
+
+.panel-tag.alt {
+  color: var(--terracotta);
+}
+
+.feature-card, .step, .credential-card {
+  min-height: 11rem;
+}
+
+.step span {
+  display: inline-block;
+  color: var(--gold);
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 0.8rem;
+}

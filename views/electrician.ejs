@@ -1,0 +1,153 @@
+<%- include('partials/head') %>
+<%- include('partials/header') %>
+
+<main class="profile-page electrician-page">
+  <section class="profile-hero">
+    <div class="container profile-hero-inner">
+      <div class="profile-media reveal">
+        <img src="<%= profile.photo %>" alt="<%= profile.name %>" />
+      </div>
+      <div class="profile-copy reveal">
+        <p class="eyebrow">Electrical services</p>
+        <h1><%= profile.name %></h1>
+        <h2><%= profile.title %></h2>
+        <p class="lead"><%= profile.bio %></p>
+        <ul class="meta-list">
+          <li><strong>Location:</strong> <%= profile.location %></li>
+          <li><strong>Availability:</strong> <%= profile.availability %></li>
+          <li><strong>Experience:</strong> <%= profile.experience_years %></li>
+          <li><strong>Preferred work:</strong> <%= profile.employment_type %></li>
+        </ul>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="tel:<%= profile.phone %>">Call Electrician</a>
+          <a class="btn btn-secondary" href="sms:<%= profile.phone %>">Send SMS</a>
+          <a class="btn btn-secondary" href="<%= whatsappLink %>" target="_blank" rel="noreferrer">WhatsApp</a>
+          <a class="btn btn-secondary" href="mailto:<%= profile.email || 'hello@craftandcurrent.co.ke' %>">Email</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section profile-section">
+    <div class="container two-column-layout">
+      <div class="content-block reveal">
+        <p class="eyebrow">Services</p>
+        <h3>Electrical services offered</h3>
+        <ul class="content-list">
+          <% services.forEach((service) => { %>
+            <li>
+              <strong><%= service.title %></strong>
+              <p><%= service.description %></p>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+      <div class="content-block reveal">
+        <p class="eyebrow">Overview</p>
+        <h3>Professional summary</h3>
+        <p><%= profile.overview %></p>
+        <p>Work is focused on practical, safe and reliable outcomes for residential and small commercial customers.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section profile-section alt-panel">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Qualifications</p>
+        <h2>Training, qualifications and verification status</h2>
+      </div>
+      <div class="timeline-list">
+        <% qualifications.forEach((item) => { %>
+          <article class="timeline-item reveal">
+            <span class="timeline-year"><%= item.date %></span>
+            <div>
+              <h3><%= item.title %></h3>
+              <p><strong><%= item.institution %></strong> · <%= item.type %></p>
+              <p><%= item.details %></p>
+              <small><%= item.verification %></small>
+            </div>
+          </article>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+
+  <section class="section profile-section">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Experience</p>
+        <h2>Employment history and professional background</h2>
+      </div>
+      <div class="experience-grid">
+        <% experiences.forEach((exp) => { %>
+          <article class="experience-card reveal">
+            <span class="badge"><%= exp.employment_type %></span>
+            <h3><%= exp.title %></h3>
+            <p><strong><%= exp.company %></strong></p>
+            <p><%= exp.start_date %> - <%= exp.current ? 'Current' : exp.end_date %></p>
+            <p><%= exp.description %></p>
+          </article>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+
+  <section class="section profile-section alt-panel">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Project portfolio</p>
+        <h2>Completed work and installation highlights</h2>
+      </div>
+      <div class="project-grid">
+        <% projects.forEach((project) => { %>
+          <article class="project-card reveal">
+            <div class="project-image" style="background-image: url('<%= project.image %>');"></div>
+            <div class="project-copy">
+              <span class="panel-tag"><%= project.category %></span>
+              <h3><%= project.title %></h3>
+              <p><%= project.description %></p>
+            </div>
+          </article>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact" class="section contact-section">
+    <div class="container contact-grid">
+      <div class="contact-card reveal">
+        <p class="eyebrow">Contact</p>
+        <h2>Book a consultation or request electrical support</h2>
+        <ul class="contact-list">
+          <li><a href="tel:<%= profile.phone %>">Call: <%= profile.phone %></a></li>
+          <li><a href="sms:<%= profile.phone %>">SMS</a></li>
+          <li><a href="<%= whatsappLink %>" target="_blank" rel="noreferrer">WhatsApp</a></li>
+          <li><a href="mailto:<%= profile.email || 'hello@craftandcurrent.co.ke' %>">Email</a></li>
+        </ul>
+      </div>
+
+      <form class="enquiry-form reveal" method="POST" action="/enquiry">
+        <input type="hidden" name="role" value="electrician" />
+        <label>
+          <span>Your name</span>
+          <input type="text" name="customer_name" required />
+        </label>
+        <label>
+          <span>Project or service</span>
+          <input type="text" name="subject" required />
+        </label>
+        <label>
+          <span>Details</span>
+          <textarea name="message" rows="5" required></textarea>
+        </label>
+        <button class="btn btn-primary" type="submit">Send enquiry</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<%- include('partials/footer') %>
+<script src="/js/main.js"></script>
+</body>
+</html>

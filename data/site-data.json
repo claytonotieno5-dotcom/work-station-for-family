@@ -1,0 +1,191 @@
+{
+  "profiles": {
+    "electrician": {
+      "name": "EDWARD OTIENO ASIENYO",
+      "title": "Licensed Electrician & Maintenance Technician",
+      "photo": "/uploads/849660cd8cd4794c2604e489b8cd2ab7.png",
+      "bio": "Experienced electrician focused on safe residential and commercial electrical installations, repairs and maintenance work across the local service area.",
+      "location": "Migori, Kenya",
+      "availability": "Available for projects and maintenance work",
+      "experience_years": "7 ",
+      "employment_type": "Project-based",
+      "phone": "0721909801",
+      "whatsapp": "254721909801",
+      "email": "electrician@craftandcurrent.co.ke",
+      "social": "",
+      "overview": "Reliable electrical services for homes, small businesses and property managers.",
+      "section": "profile"
+    },
+    "tailor": {
+      "name": "MARY ADHIAMBO ADERO",
+      "title": "Tailor & Fashion Designer",
+      "photo": "/images/tailor-profile.svg",
+      "bio": "Tailoring specialist creating custom garments, repairs and alterations for clients who value fit, finish and personal style.",
+      "location": "Migori, Kenya",
+      "availability": "Open for custom orders and adjustments",
+      "experience_years": "6 ",
+      "employment_type": "Freelance",
+      "phone": "0714284723",
+      "whatsapp": "254714284723",
+      "email": "tailor@craftandcurrent.co.ke",
+      "social": "",
+      "overview": "Tailored garments, alterations and fittings designed around your lifestyle.",
+      "section": "profile"
+    },
+    "developer": {
+      "name": "OTIENO CLAYTON",
+      "title": "Computer Science Student & Web Developer",
+      "photo": "/images/developer-profile.svg",
+      "bio": "Student developer building responsive websites, business automation tools and custom web applications for small businesses and professionals.",
+      "location": "KISII",
+      "availability": "Available for web and automation projects",
+      "experience_years": "1 YEAR",
+      "employment_type": "Freelance",
+      "phone": "0743709955",
+      "whatsapp": "254743709955",
+      "email": "claytonotieno5@gmail.com",
+      "social": "claytonotieno5-dotcom",
+      "overview": "Professional digital products for growing local businesses. website creation and software development ,business automation system",
+      "section": "profile"
+    }
+  },
+  "services": {
+    "electrician": [
+      {
+        "title": "Residential electrical installations",
+        "description": "From planning through wiring and commissioning for complete home electrical systems."
+      },
+      {
+        "title": "Wiring and rewiring",
+        "description": "Safe wiring upgrades, installation repairs and reconfiguration for improved reliability."
+      },
+      {
+        "title": "Fault diagnosis and repairs",
+        "description": "Quick testing and repair of failing circuits, appliance faults and power supply issues."
+      },
+      {
+        "title": "Lighting and socket installation",
+        "description": "Interior and exterior lighting, switches, sockets and circuit additions."
+      }
+    ],
+    "tailor": [
+      {
+        "title": "Custom clothing",
+        "description": "Bespoke outfits created to fit your measurements, style and occasion."
+      },
+      {
+        "title": "Alterations and resizing",
+        "description": "Precise resizing, adjustments and fit corrections to improve comfort and finish."
+      },
+      {
+        "title": "Hemming and fitting",
+        "description": "Professional hemming and fitting services for dresses, trousers, skirts and uniforms."
+      },
+      {
+        "title": "Garment repairs",
+        "description": "Mending and restyling for clothing that needs careful repair and finishing."
+      }
+    ],
+    "developer": [
+      {
+        "title": "Business websites",
+        "description": "Professional landing pages and service websites focused on trust and conversion."
+      },
+      {
+        "title": "Business automation",
+        "description": "Workflow automations to reduce repeating admin work and improve service delivery."
+      },
+      {
+        "title": "Responsive redesigns",
+        "description": "Updating older sites for mobile usability, clearer messaging and better performance."
+      }
+    ]
+  },
+  "projects": {
+    "electrician": [
+      {
+        "title": "Kitchen rewiring",
+        "description": "Updated an old kitchen circuit layout for safer and more reliable power distribution.",
+        "category": "Residential",
+        "image": "/images/project-electrical.svg",
+        "id": "638dbf17172e31f2488b4d7e",
+        "comments": [
+          {
+            "name": "dndnf",
+            "text": "good wok",
+            "created_at": "2026-10-18T10:12:38.332Z"
+          }
+        ]
+      },
+      {
+        "title": "Lighting installation",
+        "description": "Installed layered lighting and power points for a renovated living room area.",
+        "category": "Lighting",
+        "image": "/images/project-electrical.svg",
+        "id": "a568a5f127a102b8f1b85065",
+        "comments": []
+      }
+    ],
+    "tailor": [
+      {
+        "title": "Custom evening dress",
+        "description": "Designed a bespoke dress with structured fit and tailored finishing.",
+        "category": "Dressmaking",
+        "image": "/images/project-tailor.svg",
+        "id": "5c545fafedb71f9ea0abe04c",
+        "comments": []
+      },
+      {
+        "title": "Alteration and resizing",
+        "description": "Adjusted premium garments to fit perfectly and improve comfort.",
+        "category": "Alterations",
+        "image": "/images/project-tailor.svg",
+        "id": "2d4a10123cf6e49f5e7671cb",
+        "comments": []
+      }
+    ],
+    "developer": [
+      {
+        "title": "Family services website",
+        "description": "A premium brochure and services platform built to showcase professional offerings and lead generation.",
+        "category": "Web Development",
+        "image": "/images/project-developer.svg",
+        "id": "7327395c1b1c82e25e231883",
+        "comments": []
+      }
+    ]
+  },
+  "enquiries": [
+    {
+      "role": "electrician",
+      "customer_name": "gcg",
+      "contact_method": "Phone",
+      "subject": "repair",
+      "message": "gghj",
+      "date": "2026-11-18",
+      "budget": "677",
+      "created_at": "2026-10-18T09:21:58.788Z"
+    },
+    {
+      "role": "electrician",
+      "customer_name": "djjcb",
+      "contact_method": "Phone",
+      "subject": "wire my whole house",
+      "message": "wsdkwk",
+      "date": "2026-10-31",
+      "budget": "900000",
+      "created_at": "2026-10-18T09:40:24.893Z"
+    },
+    {
+      "role": "electrician",
+      "customer_name": "pep",
+      "contact_method": "WhatsApp",
+      "customer_contact": "+254743709955",
+      "subject": "i need u to do me wiring",
+      "message": "is a house",
+      "date": "",
+      "budget": "",
+      "created_at": "2026-10-18T10:14:15.070Z"
+    }
+  ]
+}

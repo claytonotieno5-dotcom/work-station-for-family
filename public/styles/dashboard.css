@@ -1,0 +1,89 @@
+.dashboard-page .dashboard-main {
+  background: rgba(32, 28, 24, 0.72);
+}
+
+.dashboard-section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.dashboard-section h3 {
+  margin-bottom: 1rem;
+}
+
+.upload-form {
+  display: grid;
+  gap: 1rem;
+  max-width: 44rem;
+}
+
+.upload-form input[type="file"] {
+  padding: 0.7rem;
+}
+
+.profile-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.dashboard-profile-photo {
+  width: 8rem;
+  height: 8rem;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+
+.enquiry-list {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.enquiry-item {
+  padding: 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: rgba(255,255,255,0.025);
+  overflow-wrap: anywhere;
+}
+
+.enquiry-item p + p {
+  margin-top: 0.7rem;
+}
+
+.enquiry-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.enquiry-heading time {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.enquiry-item a {
+  color: var(--gold);
+}
+
+@media (max-width: 900px) {
+  .profile-page .project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .profile-upload-row,
+  .enquiry-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .profile-page .project-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,172 @@
+<%- include('partials/head') %>
+<%- include('partials/header') %>
+
+<main class="dashboard-page">
+  <div class="container dashboard-shell">
+    <aside class="dashboard-sidebar reveal">
+      <h2><%= department %></h2>
+      <nav>
+        <a href="/dashboard/<%= role %>">Profile</a>
+        <a href="/logout">Log out</a>
+      </nav>
+    </aside>
+
+    <section class="dashboard-main reveal">
+      <div class="dashboard-header">
+        <div>
+          <p class="eyebrow">Dashboard</p>
+          <h1><%= profile.name || 'Update profile' %></h1>
+        </div>
+        <a class="btn btn-secondary" href="/" target="_blank" rel="noreferrer">Preview site</a>
+      </div>
+
+      <form method="POST" action="/dashboard/<%= role %>/profile" class="dashboard-form">
+        <div class="field-grid">
+          <label>
+            <span>Full name</span>
+            <input type="text" name="name" value="<%= profile.name || '' %>" />
+          </label>
+          <label>
+            <span>Professional title</span>
+            <input type="text" name="title" value="<%= profile.title || '' %>" />
+          </label>
+        </div>
+        <label>
+          <span>Bio</span>
+          <textarea name="bio" rows="4"><%= profile.bio || '' %></textarea>
+        </label>
+        <div class="field-grid">
+          <label>
+            <span>Location</span>
+            <input type="text" name="location" value="<%= profile.location || '' %>" />
+          </label>
+          <label>
+            <span>Availability</span>
+            <input type="text" name="availability" value="<%= profile.availability || '' %>" />
+          </label>
+        </div>
+        <div class="field-grid">
+          <label>
+            <span>Experience</span>
+            <input type="text" name="experience_years" value="<%= profile.experience_years || '' %>" />
+          </label>
+          <label>
+            <span>Employment type</span>
+            <input type="text" name="employment_type" value="<%= profile.employment_type || '' %>" />
+          </label>
+        </div>
+        <div class="field-grid">
+          <label>
+            <span>Phone</span>
+            <input type="text" name="phone" value="<%= profile.phone || '' %>" />
+          </label>
+          <label>
+            <span>WhatsApp</span>
+            <input type="text" name="whatsapp" value="<%= profile.whatsapp || '' %>" />
+          </label>
+        </div>
+        <div class="field-grid">
+          <label>
+            <span>Email</span>
+            <input type="email" name="email" value="<%= profile.email || '' %>" />
+          </label>
+          <label>
+            <span>Social link</span>
+            <input type="text" name="social" value="<%= profile.social || '' %>" />
+          </label>
+        </div>
+        <label>
+          <span>Overview</span>
+          <textarea name="overview" rows="3"><%= profile.overview || '' %></textarea>
+        </label>
+        <button class="btn btn-primary" type="submit">Save profile</button>
+      </form>
+
+      <div class="dashboard-section">
+        <h3>Upload profile photo</h3>
+        <form method="POST" action="/dashboard/<%= role %>/profile-photo" enctype="multipart/form-data">
+          <input type="file" name="photo" accept="image/*" />
+          <button class="btn btn-secondary" type="submit">Upload photo</button>
+        </form>
+      </div>
+
+      <div class="dashboard-section">
+        <h3>Upload CV</h3>
+        <form method="POST" action="/dashboard/<%= role %>/cv" enctype="multipart/form-data">
+          <input type="file" name="cv_file" accept="application/pdf" />
+          <button class="btn btn-secondary" type="submit">Upload CV</button>
+        </form>
+      </div>
+
+      <div class="dashboard-section">
+        <h3>Add service</h3>
+        <form method="POST" action="/dashboard/<%= role %>/service" class="inline-form">
+          <input type="text" name="title" placeholder="Service title" required />
+          <input type="text" name="category" placeholder="Category" />
+          <input type="text" name="price" placeholder="Price or quote" />
+          <textarea name="description" rows="3" placeholder="Describe the service" required></textarea>
+          <label class="checkbox-row"><input type="checkbox" name="published" checked /> Published</label>
+          <button class="btn btn-primary" type="submit">Add service</button>
+        </form>
+        <ul class="management-list">
+          <% services.forEach((service) => { %>
+            <li>
+              <span><%= service.title %></span>
+              <form method="POST" action="/dashboard/<%= role %>/service/<%= service.id %>/delete">
+                <button class="btn btn-secondary" type="submit">Delete</button>
+              </form>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+
+      <div class="dashboard-section">
+        <h3>Add qualification</h3>
+        <form method="POST" action="/dashboard/<%= role %>/qualification" class="inline-form">
+          <input type="text" name="title" placeholder="Qualification title" required />
+          <input type="text" name="institution" placeholder="Institution" required />
+          <input type="text" name="type" placeholder="Type" />
+          <input type="text" name="date" placeholder="Completion date" />
+          <textarea name="details" rows="3" placeholder="Description"></textarea>
+          <input type="text" name="verification" placeholder="Verification status" />
+          <button class="btn btn-primary" type="submit">Add qualification</button>
+        </form>
+      </div>
+
+      <div class="dashboard-section">
+        <h3>Add experience</h3>
+        <form method="POST" action="/dashboard/<%= role %>/experience" class="inline-form">
+          <input type="text" name="company" placeholder="Company or employer" required />
+          <input type="text" name="title" placeholder="Job title" required />
+          <input type="text" name="employment_type" placeholder="Employment type" />
+          <input type="date" name="start_date" />
+          <input type="date" name="end_date" />
+          <label class="checkbox-row"><input type="checkbox" name="current" /> Current position</label>
+          <textarea name="description" rows="3" placeholder="Responsibilities"></textarea>
+          <button class="btn btn-primary" type="submit">Add experience</button>
+        </form>
+      </div>
+
+      <div class="dashboard-section">
+        <h3>Add project</h3>
+        <form method="POST" action="/dashboard/<%= role %>/project" enctype="multipart/form-data" class="inline-form">
+          <input type="text" name="title" placeholder="Project title" required />
+          <input type="text" name="category" placeholder="Category" />
+          <input type="text" name="location" placeholder="Location" />
+          <input type="date" name="completion_date" />
+          <input type="text" name="status" placeholder="Status" />
+          <textarea name="description" rows="3" placeholder="Description"></textarea>
+          <textarea name="challenge" rows="2" placeholder="Challenge"></textarea>
+          <textarea name="materials" rows="2" placeholder="Materials"></textarea>
+          <input type="file" name="project_image" accept="image/*" />
+          <button class="btn btn-primary" type="submit">Add project</button>
+        </form>
+      </div>
+    </section>
+  </div>
+</main>
+
+<%- include('partials/footer') %>
+<script src="/js/main.js"></script>
+</body>
+</html>

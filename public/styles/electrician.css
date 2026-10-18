@@ -1,0 +1,7 @@
+.electrician-page .profile-hero {
+  background: linear-gradient(135deg, rgba(24,20,18,0.84), rgba(89,57,39,0.38));
+}
+
+.electrician-page .btn-primary {
+  background: linear-gradient(135deg, #d8a163, #a96d4a);
+}

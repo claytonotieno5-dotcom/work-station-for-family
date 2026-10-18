@@ -1,0 +1,76 @@
+<%- include('partials/head') %>
+<%- include('partials/header') %>
+
+<main class="profile-page developer-page">
+  <section class="profile-hero">
+    <div class="container profile-hero-inner">
+      <div class="profile-media reveal">
+        <img src="<%= profile.photo %>" alt="<%= profile.name %>" />
+      </div>
+      <div class="profile-copy reveal">
+        <p class="eyebrow">Developer services</p>
+        <h1><%= profile.name %></h1>
+        <h2><%= profile.title %></h2>
+        <p class="lead"><%= profile.bio %></p>
+        <ul class="meta-list">
+          <li><strong>Location:</strong> <%= profile.location %></li>
+          <li><strong>Availability:</strong> <%= profile.availability %></li>
+          <li><strong>Experience:</strong> <%= profile.experience_years %></li>
+          <li><strong>Service type:</strong> <%= profile.employment_type %></li>
+        </ul>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="mailto:<%= profile.email || 'hello@craftandcurrent.co.ke' %>">Request a quote</a>
+          <a class="btn btn-secondary" href="<%= profile.social || '#' %>" target="_blank" rel="noreferrer">GitHub / LinkedIn</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section profile-section">
+    <div class="container two-column-layout">
+      <div class="content-block reveal">
+        <p class="eyebrow">Skills</p>
+        <h3>Technology and services</h3>
+        <ul class="content-list">
+          <% services.forEach((service) => { %>
+            <li>
+              <strong><%= service.title %></strong>
+              <p><%= service.description %></p>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+      <div class="content-block reveal">
+        <p class="eyebrow">Case study</p>
+        <h3>This platform as a modern service showcase</h3>
+        <p>The project combines premium UI design, secure authentication, portfolio presentation and enquiry flows into one professional website that helps small businesses attract and retain customers.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section profile-section alt-panel">
+    <div class="container">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Projects</p>
+        <h2>Selected examples and case studies</h2>
+      </div>
+      <div class="project-grid">
+        <% projects.forEach((project) => { %>
+          <article class="project-card reveal">
+            <div class="project-image" style="background-image: url('<%= project.image %>');"></div>
+            <div class="project-copy">
+              <span class="panel-tag"><%= project.category %></span>
+              <h3><%= project.title %></h3>
+              <p><%= project.description %></p>
+            </div>
+          </article>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+</main>
+
+<%- include('partials/footer') %>
+<script src="/js/main.js"></script>
+</body>
+</html>
