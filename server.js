@@ -5,14 +5,92 @@ const crypto = require('crypto');
 const { URL } = require('url');
 
 const rootDir = __dirname;
+const localEnvFile = path.join(rootDir, '.env');
+if (fs.existsSync(localEnvFile) && typeof process.loadEnvFile === 'function') {
+  process.loadEnvFile(localEnvFile);
+}
+
+function resolveConfiguredPath(value, defaultPath) {
+  if (!value) return defaultPath;
+  return path.isAbsolute(value) ? path.normalize(value) : path.resolve(rootDir, value);
+}
+
 const publicDir = path.join(rootDir, 'public');
-const uploadsDir = path.join(rootDir, 'uploads');
-const dataDir = path.join(rootDir, 'data');
+const dataDir = resolveConfiguredPath(process.env.DATA_DIR, path.join(rootDir, 'data'));
+const uploadsDir = resolveConfiguredPath(process.env.UPLOAD_DIR, path.join(rootDir, 'uploads'));
 const dataFile = path.join(dataDir, 'site-data.json');
-const port = process.env.PORT || 3000;
-const host = process.env.HOST || '127.0.0.1';
+const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const isProduction = process.env.NODE_ENV === 'production';
 const trustProxy = process.env.TRUST_PROXY === 'true';
+const storageProvider = String(process.env.STORAGE_PROVIDER || 'local').trim().toLowerCase();
+const maxImageBytes = process.env.VERCEL === '1' ? 4 * 1024 * 1024 : 8 * 1024 * 1024;
+const maxImageLabel = `${maxImageBytes / (1024 * 1024)} MB`;
+const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const pool = process.env.DATABASE_URL
+  ? new (require('pg').Pool)({
+      connectionString: process.env.DATABASE_URL,
+      max: process.env.VERCEL === '1' ? 1 : 5,
+      connectionTimeoutMillis: 5000,
+      idleTimeoutMillis: 10000,
+      query_timeout: 10000,
+      statement_timeout: 10000
+    })
+  : null;
+let databaseReady;
+const sessions = new Map();
+const loginAttempts = new Map();
+
+function validateRequiredEnvironment() {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    const error = new Error('PORT must be an integer between 1 and 65535.');
+    error.code = 'CONFIGURATION';
+    throw error;
+  }
+
+  if (!['local', 'blob'].includes(storageProvider)) {
+    const error = new Error('STORAGE_PROVIDER must be either "local" or "blob".');
+    error.code = 'CONFIGURATION';
+    throw error;
+  }
+
+  if (!isProduction) {
+    return;
+  }
+
+  const requiredVars = ['SESSION_SECRET', 'ELECTRICIAN_PASSWORD', 'TAILOR_PASSWORD', 'DEVELOPER_PASSWORD', 'DATABASE_URL'];
+  const missing = requiredVars.filter((key) => !process.env[key] || !String(process.env[key]).trim());
+  if (process.env.SESSION_SECRET && String(process.env.SESSION_SECRET).length < 32) {
+    missing.push('SESSION_SECRET (at least 32 characters)');
+  }
+  if (storageProvider === 'blob' && !process.env.BLOB_READ_WRITE_TOKEN) {
+    missing.push('BLOB_READ_WRITE_TOKEN');
+  }
+  if (storageProvider === 'local' && !process.env.UPLOAD_DIR) {
+    missing.push('UPLOAD_DIR (persistent host volume path)');
+  }
+  if (process.env.DATABASE_URL) {
+    try {
+      const databaseUrl = new URL(process.env.DATABASE_URL);
+      if (!['postgres:', 'postgresql:'].includes(databaseUrl.protocol)) missing.push('DATABASE_URL (must use PostgreSQL)');
+    } catch (error) {
+      missing.push('DATABASE_URL (must be a valid PostgreSQL connection URL)');
+    }
+  }
+  if (process.env.TRUST_PROXY !== 'true') {
+    missing.push('TRUST_PROXY=true (required behind the host HTTPS proxy)');
+  }
+  if (process.env.VERCEL === '1' && storageProvider !== 'blob') {
+    const error = new Error('Vercel deployments require STORAGE_PROVIDER=blob and a BLOB_READ_WRITE_TOKEN.');
+    error.code = 'CONFIGURATION';
+    throw error;
+  }
+  if (missing.length > 0) {
+    const error = new Error(`Missing required production environment variables: ${[...new Set(missing)].join(', ')}. See .env.example and README.md.`);
+    error.code = 'CONFIGURATION';
+    throw error;
+  }
+}
 
 const roleNames = { electrician: 'Electrician', tailor: 'Tailor', developer: 'Developer' };
 const passwords = {
@@ -104,46 +182,161 @@ const defaultData = {
   enquiries: []
 };
 
-fs.mkdirSync(dataDir, { recursive: true });
-fs.mkdirSync(uploadsDir, { recursive: true });
-fs.mkdirSync(publicDir, { recursive: true });
-
-function ensureDataFile() {
-  if (!fs.existsSync(dataFile)) {
-    fs.writeFileSync(dataFile, JSON.stringify(defaultData, null, 2), 'utf8');
+async function initializeDatabase() {
+  if (!pool) {
+    return;
   }
-}
-
-function loadData() {
-  ensureDataFile();
+  if (!databaseReady) {
+    databaseReady = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS application_state (
+          state_key TEXT PRIMARY KEY,
+          state_data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS app_sessions (
+          token_hash TEXT PRIMARY KEY,
+          role TEXT NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS login_rate_limits (
+          ip_hash TEXT PRIMARY KEY,
+          window_started_at TIMESTAMPTZ NOT NULL,
+          attempts INTEGER NOT NULL
+        )
+      `);
+      await pool.query(
+        'INSERT INTO application_state (state_key, state_data) VALUES ($1, $2::jsonb) ON CONFLICT (state_key) DO NOTHING',
+        ['site', JSON.stringify(defaultData)]
+      );
+    })();
+  }
   try {
-    const raw = fs.readFileSync(dataFile, 'utf8');
-    const data = JSON.parse(raw);
-    let changed = false;
-    data.enquiries = Array.isArray(data.enquiries) ? data.enquiries : [];
-    for (const role of Object.keys(roleNames)) {
-      data.services[role] = Array.isArray(data.services[role]) ? data.services[role] : [];
-      data.projects[role] = Array.isArray(data.projects[role]) ? data.projects[role] : [];
-      data.projects[role].forEach((project) => {
-        if (!project.id) {
-          project.id = crypto.randomBytes(12).toString('hex');
-          changed = true;
-        }
-        if (!Array.isArray(project.comments)) {
-          project.comments = [];
-          changed = true;
-        }
-      });
-    }
-    if (changed) saveData(data);
-    return data;
+    await databaseReady;
   } catch (error) {
-    throw new Error(`Unable to load site content from ${dataFile}: ${error.message}`);
+    databaseReady = null;
+    throw error;
   }
 }
 
-function saveData(data) {
-  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), 'utf8');
+async function updateData(update) {
+  if (!pool) {
+    const data = await loadData();
+    await update(data);
+    await saveData(data);
+    return data;
+  }
+
+  await initializeDatabase();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      'SELECT state_data FROM application_state WHERE state_key = $1 FOR UPDATE',
+      ['site']
+    );
+    if (result.rowCount !== 1) {
+      throw new Error('Application data is not initialized in the database.');
+    }
+    const normalized = normalizeData(result.rows[0].state_data);
+    await update(normalized.data);
+    await client.query(
+      'UPDATE application_state SET state_data = $1::jsonb, updated_at = NOW() WHERE state_key = $2',
+      [JSON.stringify(normalized.data), 'site']
+    );
+    await client.query('COMMIT');
+    return normalized.data;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function normalizeData(data) {
+  let changed = false;
+  data.profiles = data.profiles || JSON.parse(JSON.stringify(defaultData.profiles));
+  data.enquiries = Array.isArray(data.enquiries) ? data.enquiries : [];
+  data.services = data.services || {};
+  data.projects = data.projects || {};
+  for (const role of Object.keys(roleNames)) {
+    data.services[role] = Array.isArray(data.services[role]) ? data.services[role] : [];
+    data.projects[role] = Array.isArray(data.projects[role]) ? data.projects[role] : [];
+    data.projects[role].forEach((project) => {
+      if (!project.id) {
+        project.id = crypto.randomBytes(12).toString('hex');
+        changed = true;
+      }
+      if (!Array.isArray(project.comments)) {
+        project.comments = [];
+        changed = true;
+      }
+    });
+  }
+  return { data, changed };
+}
+
+async function loadData() {
+  let data;
+  if (pool) {
+    await initializeDatabase();
+    const result = await pool.query(
+      'SELECT state_data FROM application_state WHERE state_key = $1',
+      ['site']
+    );
+    if (result.rowCount !== 1) {
+      throw new Error('Application data is not initialized in the database.');
+    }
+    data = result.rows[0].state_data;
+  } else {
+    try {
+      data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw new Error(`Unable to load local site content: ${error.message}`);
+      }
+      data = JSON.parse(JSON.stringify(defaultData));
+      await saveData(data);
+    }
+  }
+
+  const normalized = normalizeData(data);
+  if (normalized.changed) {
+    await saveData(normalized.data);
+  }
+  return normalized.data;
+}
+
+async function saveData(data) {
+  if (pool) {
+    await initializeDatabase();
+    await pool.query(
+      `INSERT INTO application_state (state_key, state_data, updated_at)
+       VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (state_key) DO UPDATE SET state_data = EXCLUDED.state_data, updated_at = NOW()`,
+      ['site', JSON.stringify(data)]
+    );
+    return;
+  }
+
+  fs.mkdirSync(dataDir, { recursive: true });
+  const temporaryFile = `${dataFile}.${crypto.randomBytes(8).toString('hex')}.tmp`;
+  try {
+    fs.writeFileSync(temporaryFile, JSON.stringify(data, null, 2), { encoding: 'utf8', flag: 'wx' });
+    fs.renameSync(temporaryFile, dataFile);
+  } catch (error) {
+    try {
+      fs.unlinkSync(temporaryFile);
+    } catch (cleanupError) {
+      if (cleanupError.code !== 'ENOENT') console.error('Unable to clean up temporary data file:', cleanupError.code || cleanupError.name);
+    }
+    throw new Error(`Unable to persist local site content: ${error.message}`);
+  }
 }
 
 function escapeHtml(value) {
@@ -160,21 +353,55 @@ function whatsappNumber(value) {
   return digits;
 }
 
-const sessions = new Map();
-
 function parseCookies(header) {
   const result = {};
   if (!header) return result;
   for (const pair of header.split(';')) {
     const [name, ...rest] = pair.trim().split('=');
-    if (name) result[name] = decodeURIComponent(rest.join('='));
+    if (name) {
+      try {
+        result[name] = decodeURIComponent(rest.join('='));
+      } catch (error) {
+        result[name] = '';
+      }
+    }
   }
   return result;
 }
 
-function getSession(req) {
-  const sid = parseCookies(req.headers.cookie).sessionId;
-  return sid ? (sessions.get(sid) || null) : null;
+async function getSession(req) {
+  const value = parseCookies(req.headers.cookie).sessionId;
+  if (!value) return null;
+  const [payload, signature, extra] = value.split('.');
+  if (!payload || !signature || extra) return null;
+
+  const expected = crypto.createHmac('sha256', sessionSecret).update(payload).digest();
+  let actual;
+  try {
+    actual = Buffer.from(signature, 'base64url');
+  } catch (error) {
+    return null;
+  }
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
+
+  let session;
+  try {
+    session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  } catch (error) {
+    return null;
+  }
+  if (!roleNames[session.role] || typeof session.id !== 'string' || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now()) return null;
+  if (pool) {
+    await initializeDatabase();
+    const result = await pool.query(
+      'SELECT role FROM app_sessions WHERE token_hash = $1 AND expires_at > NOW()',
+      [crypto.createHash('sha256').update(session.id).digest('hex')]
+    );
+    if (result.rowCount !== 1 || result.rows[0].role !== session.role) return null;
+  } else if (sessions.get(session.id) !== session.role) {
+    return null;
+  }
+  return session;
 }
 
 function isSecureRequest(req) {
@@ -184,10 +411,80 @@ function isSecureRequest(req) {
   return Boolean(req.socket.encrypted) || forwardedProtocol === 'https';
 }
 
-function setSession(res, role, secure) {
-  const sid = crypto.randomBytes(18).toString('hex');
-  sessions.set(sid, { role, createdAt: Date.now() });
-  res.setHeader('Set-Cookie', `sessionId=${sid}; Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
+function isSameOriginRequest(req) {
+  const origin = req.headers.origin || req.headers.referer;
+  if (!origin) return false;
+  const expectedHost = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase();
+  const expectedProtocol = isSecureRequest(req) ? 'https:' : 'http:';
+  try {
+    const actual = new URL(origin);
+    return actual.host.toLowerCase() === expectedHost && actual.protocol === expectedProtocol;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function setSession(res, role, secure) {
+  const session = { id: crypto.randomBytes(32).toString('hex'), role, expiresAt: Date.now() + 8 * 60 * 60 * 1000 };
+  if (pool) {
+    await initializeDatabase();
+    await pool.query('DELETE FROM app_sessions WHERE expires_at <= NOW()');
+    await pool.query(
+      'INSERT INTO app_sessions (token_hash, role, expires_at) VALUES ($1, $2, to_timestamp($3 / 1000.0))',
+      [crypto.createHash('sha256').update(session.id).digest('hex'), role, session.expiresAt]
+    );
+  } else {
+    sessions.set(session.id, role);
+  }
+  const payload = Buffer.from(JSON.stringify(session)).toString('base64url');
+  const signature = crypto.createHmac('sha256', sessionSecret).update(payload).digest('base64url');
+  res.setHeader('Set-Cookie', `sessionId=${payload}.${signature}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800${secure ? '; Secure' : ''}`);
+}
+
+async function recordLoginAttempt(req) {
+  const forwardedAddress = trustProxy ? String(req.headers['x-forwarded-for'] || '').split(',').pop().trim() : '';
+  const address = forwardedAddress || req.socket.remoteAddress || 'unknown';
+  const ipHash = crypto.createHmac('sha256', sessionSecret).update(address).digest('hex');
+
+  if (pool) {
+    await initializeDatabase();
+    await pool.query("DELETE FROM login_rate_limits WHERE window_started_at < NOW() - INTERVAL '1 day'");
+    const result = await pool.query(
+      `INSERT INTO login_rate_limits (ip_hash, window_started_at, attempts)
+       VALUES ($1, NOW(), 1)
+       ON CONFLICT (ip_hash) DO UPDATE SET
+         attempts = CASE
+           WHEN login_rate_limits.window_started_at <= NOW() - INTERVAL '15 minutes' THEN 1
+           ELSE login_rate_limits.attempts + 1
+         END,
+         window_started_at = CASE
+           WHEN login_rate_limits.window_started_at <= NOW() - INTERVAL '15 minutes' THEN NOW()
+           ELSE login_rate_limits.window_started_at
+         END
+       RETURNING attempts`,
+      [ipHash]
+    );
+    return result.rows[0].attempts <= 10;
+  }
+
+  const now = Date.now();
+  const previous = loginAttempts.get(ipHash);
+  const current = !previous || now - previous.windowStartedAt >= 15 * 60 * 1000
+    ? { windowStartedAt: now, attempts: 1 }
+    : { ...previous, attempts: previous.attempts + 1 };
+  loginAttempts.set(ipHash, current);
+  return current.attempts <= 10;
+}
+
+async function clearLoginAttempts(req) {
+  const forwardedAddress = trustProxy ? String(req.headers['x-forwarded-for'] || '').split(',').pop().trim() : '';
+  const address = forwardedAddress || req.socket.remoteAddress || 'unknown';
+  const ipHash = crypto.createHmac('sha256', sessionSecret).update(address).digest('hex');
+  if (pool) {
+    await pool.query('DELETE FROM login_rate_limits WHERE ip_hash = $1', [ipHash]);
+  } else {
+    loginAttempts.delete(ipHash);
+  }
 }
 
 function readBody(req, maxBytes = 1_000_000) {
@@ -215,11 +512,8 @@ function readBody(req, maxBytes = 1_000_000) {
 function parseFormData(raw) {
   const result = {};
   if (!raw) return result;
-  for (const pair of raw.toString('utf8').split('&')) {
-    if (!pair) continue;
-    const [key, ...rest] = pair.split('=');
-    if (!key) continue;
-    result[decodeURIComponent(key.replace(/\+/g, ' '))] = decodeURIComponent(rest.join('=').replace(/\+/g, ' '));
+  for (const [key, value] of new URLSearchParams(raw.toString('utf8'))) {
+    result[key] = value;
   }
   return result;
 }
@@ -254,7 +548,7 @@ function parseMultipartData(buffer, contentType) {
         const mimeMatch = /content-type:\s*([^\r\n]+)/i.exec(headers);
         result.file = {
           fieldName: fieldName[1],
-          originalName: path.basename(filename[1]),
+          originalName: path.basename(filename[1].replace(/\\/g, '/')),
           mimeType: mimeMatch ? mimeMatch[1].trim().toLowerCase() : '',
           buffer: content
         };
@@ -277,8 +571,14 @@ function validateUploadedImage(file) {
   if (!extension) {
     throw new Error('Choose a JPEG, PNG, or WebP image.');
   }
-  if (file.buffer.length === 0 || file.buffer.length > 8 * 1024 * 1024) {
-    throw new Error('Images must be smaller than 8 MB.');
+  const originalName = String(file.originalName || '');
+  const suppliedExtension = path.extname(originalName).toLowerCase();
+  const allowedExtensions = file.mimeType === 'image/jpeg' ? ['.jpg', '.jpeg'] : [extension];
+  if (!originalName || originalName.length > 255 || /[\0\r\n]/.test(originalName) || !allowedExtensions.includes(suppliedExtension)) {
+    throw new Error('The selected filename does not match its image type.');
+  }
+  if (file.buffer.length === 0 || file.buffer.length > maxImageBytes) {
+    throw new Error(`Images must be smaller than ${maxImageLabel}.`);
   }
   const isJpeg = file.mimeType === 'image/jpeg' && file.buffer[0] === 0xff && file.buffer[1] === 0xd8 && file.buffer[2] === 0xff;
   const isPng = file.mimeType === 'image/png' && file.buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
@@ -289,11 +589,37 @@ function validateUploadedImage(file) {
   return extension;
 }
 
-function saveUploadedImage(file) {
+async function saveUploadedImage(file) {
   const extension = validateUploadedImage(file);
   const filename = `${crypto.randomBytes(16).toString('hex')}${extension}`;
-  fs.writeFileSync(path.join(uploadsDir, filename), file.buffer, { flag: 'wx' });
-  return `/uploads/${filename}`;
+
+  if (storageProvider === 'blob') {
+    try {
+      const { put } = require('@vercel/blob');
+      const result = await put(filename, file.buffer, {
+        access: 'public',
+        contentType: file.mimeType,
+        addRandomSuffix: false
+      });
+      return result.url;
+    } catch (error) {
+      console.error('Blob storage upload failed:', error.code || error.name || 'unknown error');
+      const storageError = new Error('Image storage is unavailable. Check the storage configuration and try again.');
+      storageError.code = 'STORAGE_UNAVAILABLE';
+      throw storageError;
+    }
+  }
+
+  try {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    fs.writeFileSync(path.join(uploadsDir, filename), file.buffer, { flag: 'wx' });
+    return `/uploads/${filename}`;
+  } catch (error) {
+    console.error('Local upload failed:', error.code || error.name || 'unknown error');
+    const storageError = new Error('Image storage is unavailable at the moment. Please try again later.');
+    storageError.code = 'STORAGE_UNAVAILABLE';
+    throw storageError;
+  }
 }
 
 function redirect(res, location) {
@@ -302,12 +628,23 @@ function redirect(res, location) {
 }
 
 function sendHtml(res, html, status = 200) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
 }
 
-function renderHomePage() {
-  const data = loadData();
+function sendJson(res, body, status = 200) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'no-store');
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(body));
+}
+
+async function renderHomePage() {
+  const data = await loadData();
   const projectCards = ['electrician', 'tailor']
     .flatMap((role) => (data.projects[role] || []).slice(0, 2))
     .map((project) => `
@@ -327,6 +664,7 @@ function renderHomePage() {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <title>Craft & Current — Professional Services</title>
   <meta name="description" content="Craft & Current connects homeowners and businesses with trusted electrical and tailoring professionals, plus a developer portfolio." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -562,8 +900,8 @@ function renderHomePage() {
 </html>`;
 }
 
-function renderProfilePage(role, enquirySent = false) {
-  const data = loadData();
+async function renderProfilePage(role, enquirySent = false) {
+  const data = await loadData();
   const profile = data.profiles[role] || data.profiles.electrician;
   const services = data.services[role] || [];
   const projects = data.projects[role] || [];
@@ -581,6 +919,7 @@ function renderProfilePage(role, enquirySent = false) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <title>${escapeHtml(role === 'electrician' ? 'Electrician Profile | Craft & Current' : role === 'tailor' ? 'Tailoring & Fashion Profile | Craft & Current' : 'Developer Portfolio | Craft & Current')}</title>
   <meta name="description" content="${escapeHtml(profile.bio)}" />
   <link rel="stylesheet" href="/styles/tokens.css" />
@@ -689,6 +1028,7 @@ function renderLoginPage(errorMessage = '') {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <title>Staff Login</title>
   <link rel="stylesheet" href="/styles/tokens.css" />
   <link rel="stylesheet" href="/styles/reset.css" />
@@ -729,8 +1069,8 @@ function renderLoginPage(errorMessage = '') {
 </html>`;
 }
 
-function renderDashboardPage(role) {
-  const data = loadData();
+async function renderDashboardPage(role) {
+  const data = await loadData();
   const profile = data.profiles[role] || data.profiles.electrician;
   const services = data.services[role] || [];
   const projects = data.projects[role] || [];
@@ -767,6 +1107,7 @@ function renderDashboardPage(role) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <title>${escapeHtml(roleNames[role] || 'Dashboard')}</title>
   <link rel="stylesheet" href="/styles/tokens.css" />
   <link rel="stylesheet" href="/styles/reset.css" />
@@ -829,7 +1170,7 @@ function renderDashboardPage(role) {
           <div class="profile-upload-row">
             <img class="dashboard-profile-photo" src="${escapeHtml(profile.photo)}" alt="${escapeHtml(profile.name)}" />
             <form method="POST" action="/dashboard/${escapeHtml(role)}/upload-profile" enctype="multipart/form-data" class="upload-form">
-              <label><span>Choose a JPEG, PNG, or WebP image (max 8 MB)</span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" required /></label>
+              <label><span>Choose a JPEG, PNG, or WebP image (max ${maxImageLabel})</span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" required /></label>
               <button class="btn btn-primary" type="submit">Upload profile picture</button>
             </form>
           </div>
@@ -849,7 +1190,7 @@ function renderDashboardPage(role) {
         <div class="dashboard-section">
           <h3>Share work in progress</h3>
           <form method="POST" action="/dashboard/${escapeHtml(role)}/upload-project" enctype="multipart/form-data" class="upload-form">
-            <label><span>Photo (JPEG, PNG, or WebP; max 8 MB)</span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" required /></label>
+            <label><span>Photo (JPEG, PNG, or WebP; max ${maxImageLabel})</span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" required /></label>
             <div class="field-grid">
               <label><span>Project or product title</span><input type="text" name="title" maxlength="120" required /></label>
               <label><span>Category</span><input type="text" name="category" maxlength="80" placeholder="Optional" /></label>
@@ -878,28 +1219,58 @@ function renderDashboardPage(role) {
 }
 
 async function handleRequest(req, res) {
+  validateRequiredEnvironment();
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  const url = new URL(req.url, 'http://localhost');
+  const pathname = url.pathname;
+
+  if (req.method === 'GET' && pathname === '/health') {
+    if (pool) {
+      try {
+        await initializeDatabase();
+        await pool.query('SELECT 1');
+      } catch (error) {
+        console.error('Health check database failure:', error.code || error.name || 'unknown error');
+        return sendJson(res, { status: 'unavailable' }, 503);
+      }
+    }
+    return sendJson(res, { status: 'ok' });
+  }
+
   if (isProduction && !isSecureRequest(req)) {
     res.setHeader('Cache-Control', 'no-store');
     return sendHtml(res, '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>HTTPS required</title></head><body><h1>Secure connection required</h1><p>Configure a trusted HTTPS reverse proxy and set TRUST_PROXY=true before making this site public.</p></body></html>', 426);
   }
 
-  const url = new URL(req.url, 'http://localhost');
-  const pathname = url.pathname;
-
   if (req.method === 'POST' && pathname === '/login') {
     const body = parseFormData(await readBody(req));
     const role = body.role;
     const password = body.password || '';
-    if (!role || !password || password !== (passwords[role] || '')) {
+    if (!await recordLoginAttempt(req)) {
+      return sendHtml(res, renderLoginPage('Too many login attempts. Please wait 15 minutes before trying again.'), 429);
+    }
+    if (!roleNames[role] || !password || password !== (passwords[role] || '')) {
       return sendHtml(res, renderLoginPage('Incorrect password or role. Please try again.'), 401);
     }
-    setSession(res, role, isProduction || isSecureRequest(req));
+    await clearLoginAttempts(req);
+    await setSession(res, role, isProduction || isSecureRequest(req));
     return redirect(res, `/dashboard.html?role=${encodeURIComponent(role)}`);
   }
 
   if (req.method === 'GET' && pathname === '/logout') {
-    const cookies = parseCookies(req.headers.cookie);
-    if (cookies.sessionId) sessions.delete(cookies.sessionId);
+    const session = await getSession(req);
+    if (session) {
+      if (pool) {
+        await pool.query('DELETE FROM app_sessions WHERE token_hash = $1', [
+          crypto.createHash('sha256').update(session.id).digest('hex')
+        ]);
+      } else {
+        sessions.delete(session.id);
+      }
+    }
     res.setHeader('Set-Cookie', 'sessionId=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
     return redirect(res, '/');
   }
@@ -915,19 +1286,19 @@ async function handleRequest(req, res) {
         body.subject.length > 160 || body.message.length > 3000 || !contactIsValid) {
       return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>Please provide your name, enquiry details, and a WhatsApp number or email address.</h1><p><a href="/">Return to the website</a></p></body></html>', 400);
     }
-    const data = loadData();
-    data.enquiries.push({
-      role: body.role,
-      customer_name: body.customer_name.slice(0, 100),
-      contact_method: body.contact_method,
-      customer_contact: body.customer_contact.slice(0, 254),
-      subject: body.subject.slice(0, 160),
-      message: body.message.slice(0, 3000),
-      date: body.date || '',
-      budget: body.budget || '',
-      created_at: new Date().toISOString()
+    await updateData((data) => {
+      data.enquiries.push({
+        role: body.role,
+        customer_name: body.customer_name.slice(0, 100),
+        contact_method: body.contact_method,
+        customer_contact: body.customer_contact.slice(0, 254),
+        subject: body.subject.slice(0, 160),
+        message: body.message.slice(0, 3000),
+        date: body.date || '',
+        budget: body.budget || '',
+        created_at: new Date().toISOString()
+      });
     });
-    saveData(data);
     const profilePath = body.role === 'tailor' ? 'tailoring' : body.role;
     return redirect(res, `/${profilePath}.html?enquiry=sent#contact`);
   }
@@ -938,17 +1309,20 @@ async function handleRequest(req, res) {
         body.name.length > 80 || body.text.length > 1000) {
       return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>Please enter your name and a comment of up to 1,000 characters.</h1><p><a href="/">Return to the website</a></p></body></html>', 400);
     }
-    const data = loadData();
-    const project = (data.projects[body.role] || []).find((item) => item.id === body.project_id);
-    if (!project) {
+    let projectFound = false;
+    await updateData((data) => {
+      const project = (data.projects[body.role] || []).find((item) => item.id === body.project_id);
+      if (!project) return;
+      projectFound = true;
+      project.comments.push({
+        name: body.name.trim(),
+        text: body.text.trim(),
+        created_at: new Date().toISOString()
+      });
+    });
+    if (!projectFound) {
       return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>That work post could not be found.</h1><p><a href="/">Return to the website</a></p></body></html>', 404);
     }
-    project.comments.push({
-      name: body.name.trim(),
-      text: body.text.trim(),
-      created_at: new Date().toISOString()
-    });
-    saveData(data);
     const profilePath = body.role === 'tailor' ? 'tailoring' : body.role;
     return redirect(res, `/${profilePath}.html#work`);
   }
@@ -960,16 +1334,19 @@ async function handleRequest(req, res) {
       return sendHtml(res, 'Unknown role', 404);
     }
 
-    const session = getSession(req);
+    const session = await getSession(req);
     if (!session || session.role !== role) {
       return redirect(res, '/login.html');
+    }
+    if (!isSameOriginRequest(req)) {
+      return sendHtml(res, 'Request origin could not be verified. Reload the dashboard and try again.', 403);
     }
 
     const action = parts[2];
     if (action === 'upload-profile' || action === 'upload-project') {
       let upload;
       try {
-        const raw = await readBody(req, 8 * 1024 * 1024 + 128 * 1024);
+        const raw = await readBody(req, maxImageBytes + 128 * 1024);
         upload = parseMultipartData(raw, req.headers['content-type']);
       } catch (error) {
         const status = error.message === 'Request too large' ? 413 : 400;
@@ -989,11 +1366,17 @@ async function handleRequest(req, res) {
       } catch (error) {
         return sendHtml(res, `<!DOCTYPE html><html lang="en"><body><h1>${escapeHtml(error.message)}</h1><p><a href="/dashboard.html?role=${encodeURIComponent(role)}">Return to your dashboard</a></p></body></html>`, 400);
       }
-      const image = saveUploadedImage(upload.file);
-      const data = loadData();
-      if (action === 'upload-profile') {
-        data.profiles[role].photo = image;
-      } else {
+      let image;
+      try {
+        image = await saveUploadedImage(upload.file);
+      } catch (error) {
+        const status = error.code === 'STORAGE_UNAVAILABLE' ? 503 : 400;
+        return sendHtml(res, `<!DOCTYPE html><html lang="en"><body><h1>${escapeHtml(error.message)}</h1><p><a href="/dashboard.html?role=${encodeURIComponent(role)}">Return to your dashboard</a></p></body></html>`, status);
+      }
+      await updateData((data) => {
+        if (action === 'upload-profile') {
+          data.profiles[role].photo = image;
+        } else {
         const { title, category, description } = upload.fields;
         data.projects[role].unshift({
           id: crypto.randomBytes(12).toString('hex'),
@@ -1004,49 +1387,47 @@ async function handleRequest(req, res) {
           comments: [],
           created_at: new Date().toISOString()
         });
-      }
-      saveData(data);
+        }
+      });
       return redirect(res, `/dashboard.html?role=${encodeURIComponent(role)}`);
     }
 
     const body = parseFormData(await readBody(req));
-    const data = loadData();
-
-    if (body.section === 'profile') {
-      data.profiles[role] = { ...(data.profiles[role] || {}), ...body };
-    } else if (body.section === 'service') {
-      if (body.title && body.description) {
-        data.services[role] = data.services[role] || [];
-        data.services[role].push({ title: body.title, description: body.description });
+    await updateData((data) => {
+      if (body.section === 'profile') {
+        data.profiles[role] = { ...(data.profiles[role] || {}), ...body };
+      } else if (body.section === 'service') {
+        if (body.title && body.description) {
+          data.services[role] = data.services[role] || [];
+          data.services[role].push({ title: body.title, description: body.description });
+        }
+      } else if (parts[2] === 'delete-service') {
+        data.services[role] = (data.services[role] || []).filter((item) => item.title !== body.title);
+      } else if (parts[2] === 'delete-project') {
+        data.projects[role] = (data.projects[role] || []).filter((item) => item.title !== body.title);
       }
-    } else if (parts[2] === 'delete-service') {
-      data.services[role] = (data.services[role] || []).filter((item) => item.title !== body.title);
-    } else if (parts[2] === 'delete-project') {
-      data.projects[role] = (data.projects[role] || []).filter((item) => item.title !== body.title);
-    }
-
-    saveData(data);
+    });
     return redirect(res, `/dashboard.html?role=${encodeURIComponent(role)}`);
   }
 
   if (pathname === '/' || pathname === '/index.html') {
-    return sendHtml(res, renderHomePage());
+    return sendHtml(res, await renderHomePage());
   }
 
   if (pathname === '/electrician.html' || pathname === '/electrician') {
-    return sendHtml(res, renderProfilePage('electrician', url.searchParams.get('enquiry') === 'sent'));
+    return sendHtml(res, await renderProfilePage('electrician', url.searchParams.get('enquiry') === 'sent'));
   }
 
   if (pathname === '/tailoring.html' || pathname === '/tailoring') {
-    return sendHtml(res, renderProfilePage('tailor', url.searchParams.get('enquiry') === 'sent'));
+    return sendHtml(res, await renderProfilePage('tailor', url.searchParams.get('enquiry') === 'sent'));
   }
 
   if (pathname === '/developer.html' || pathname === '/developer') {
-    return sendHtml(res, renderProfilePage('developer', url.searchParams.get('enquiry') === 'sent'));
+    return sendHtml(res, await renderProfilePage('developer', url.searchParams.get('enquiry') === 'sent'));
   }
 
   if (pathname === '/login.html' || pathname === '/login') {
-    const session = getSession(req);
+    const session = await getSession(req);
     if (session && session.role) {
       return redirect(res, `/dashboard.html?role=${encodeURIComponent(session.role)}`);
     }
@@ -1058,11 +1439,11 @@ async function handleRequest(req, res) {
     if (!roleNames[role]) {
       return sendHtml(res, 'Unknown role', 404);
     }
-    const session = getSession(req);
+    const session = await getSession(req);
     if (!session || session.role !== role) {
       return redirect(res, '/login.html');
     }
-    return sendHtml(res, renderDashboardPage(role));
+    return sendHtml(res, await renderDashboardPage(role));
   }
 
   if (pathname === '/robots.txt') {
@@ -1074,12 +1455,22 @@ async function handleRequest(req, res) {
   }
 
   if (pathname.startsWith('/uploads/')) {
+    if (storageProvider !== 'local') {
+      return sendHtml(res, 'Not found', 404);
+    }
     const filename = pathname.slice('/uploads/'.length);
     if (!/^[a-f0-9]{32}\.(jpg|png|webp)$/.test(filename)) {
       return sendHtml(res, 'Not found', 404);
     }
     const uploadedPath = path.join(uploadsDir, filename);
-    if (!fs.existsSync(uploadedPath) || !fs.statSync(uploadedPath).isFile()) {
+    let stat;
+    try {
+      stat = fs.statSync(uploadedPath);
+    } catch (error) {
+      if (error.code === 'ENOENT') return sendHtml(res, 'Not found', 404);
+      throw error;
+    }
+    if (!stat.isFile()) {
       return sendHtml(res, 'Not found', 404);
     }
     const mime = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[path.extname(filename)];
@@ -1088,12 +1479,17 @@ async function handleRequest(req, res) {
       'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'public, max-age=86400'
     });
-    return fs.createReadStream(uploadedPath).pipe(res);
+    const stream = fs.createReadStream(uploadedPath);
+    stream.on('error', (error) => {
+      console.error('Local upload read failed:', error.code || error.name || 'unknown error');
+      if (!res.headersSent) sendHtml(res, 'Unable to load image', 500);
+      else res.destroy(error);
+    });
+    return stream.pipe(res);
   }
 
-  const requestedPath = pathname.replace(/^\//, '');
-  const publicPath = path.join(publicDir, requestedPath);
-  if (fs.existsSync(publicPath) && fs.statSync(publicPath).isFile()) {
+  const publicPath = path.resolve(publicDir, `.${pathname}`);
+  if (publicPath.startsWith(`${publicDir}${path.sep}`) && fs.existsSync(publicPath) && fs.statSync(publicPath).isFile()) {
     const ext = path.extname(publicPath).toLowerCase();
     const mime = {
       '.html': 'text/html; charset=utf-8',
@@ -1107,6 +1503,7 @@ async function handleRequest(req, res) {
       '.webp': 'image/webp'
     };
     const content = fs.readFileSync(publicPath);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
     res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
     return res.end(content);
   }
@@ -1114,13 +1511,45 @@ async function handleRequest(req, res) {
   return sendHtml(res, '<!DOCTYPE html><html><body><h1>Page not found</h1></body></html>', 404);
 }
 
-const server = http.createServer((req, res) => {
-  handleRequest(req, res).catch((error) => {
-    console.error(error);
-    sendHtml(res, '<!DOCTYPE html><html><body><h1>Server error</h1></body></html>', 500);
-  });
-});
+module.exports = async function handler(req, res) {
+  try {
+    return await handleRequest(req, res);
+  } catch (error) {
+    console.error('Request failed:', error.code || error.name || 'unknown error');
+    if (res.headersSent) {
+      res.destroy();
+    } else if (error.code === 'ERR_INVALID_URL') {
+      sendHtml(res, 'Bad request', 400);
+    } else {
+      sendHtml(res, '<!DOCTYPE html><html><body><h1>Server error</h1></body></html>', 500);
+    }
+  }
+};
 
-server.listen(port, host, () => {
-  console.log(`Craft & Current running at http://${host}:${port}`);
-});
+if (require.main === module) {
+  let configurationValid = true;
+  try {
+    validateRequiredEnvironment();
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+    configurationValid = false;
+  }
+
+  if (configurationValid) {
+    const server = http.createServer((req, res) => {
+      handleRequest(req, res).catch((error) => {
+        console.error('Request failed:', error.code || error.name || 'unknown error');
+        if (res.headersSent) {
+          res.destroy();
+        } else {
+          sendHtml(res, '<!DOCTYPE html><html><body><h1>Server error</h1></body></html>', 500);
+        }
+      });
+    });
+
+    server.listen(port, host, () => {
+      console.log(`Craft & Current running at http://${host}:${port}`);
+    });
+  }
+}

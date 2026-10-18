@@ -1,15 +1,12 @@
 node_modules/
 .env
-uploads/
-*.log
-.DS_Store
-
-# Local secrets and session files
-.env
 .env.*
 !.env.example
+uploads/
+data/site-data.json
+.sessions/
+.vercel/
+*.log
+.DS_Store
 cookies.txt
 headers.txt
-
-# Dependencies and local data
-node_modules/
