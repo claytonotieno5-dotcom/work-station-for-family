@@ -29,6 +29,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const reveals = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window)) {
+    reveals.forEach((item) => item.classList.add('visible'));
+    return;
+  }
+
+  document.body.classList.add('reveal-enabled');
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       if (entry.isIntersecting) {

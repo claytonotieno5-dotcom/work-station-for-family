@@ -1,7 +1,13 @@
 .tailoring-page .profile-hero {
-  background: linear-gradient(135deg, rgba(29,25,23,0.8), rgba(117,75,55,0.36));
+  background: linear-gradient(135deg, rgba(228,123,92,0.12), rgba(217,139,78,0.05));
 }
 
 .tailoring-page .btn-primary {
-  background: linear-gradient(135deg, #d49771, #a55d43);
+  background: linear-gradient(135deg, #ffc28e, #e47b5c);
+  color: #2b1d13;
+}
+
+.tailoring-page .profile-copy .eyebrow,
+.tailoring-page .text-link {
+  color: #ffb88d;
 }

@@ -8,11 +8,35 @@
 
 .info-card:hover, .service-panel:hover, .feature-card:hover, .step:hover, .credential-card:hover, .project-card:hover, .experience-card:hover, .content-block:hover, .timeline-item:hover {
   transform: translateY(-3px);
-  border-color: rgba(185,138,74,0.52);
+  border-color: rgba(242,191,88,0.58);
+}
+
+.info-card,
+.service-panel,
+.feature-card,
+.step,
+.credential-card,
+.experience-card,
+.content-block {
+  transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
+}
+
+.info-card:hover,
+.service-panel:hover,
+.feature-card:hover,
+.step:hover,
+.credential-card:hover,
+.experience-card:hover,
+.content-block:hover {
+  box-shadow: 0 26px 58px rgba(15, 10, 6, 0.34);
 }
 
 .site-footer h4 {
   margin-bottom: 0.9rem;
+}
+
+.site-footer h4 {
+  color: var(--gold);
 }
 
 .site-footer p,

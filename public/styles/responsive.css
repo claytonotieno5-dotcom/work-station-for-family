@@ -1,3 +1,149 @@
 @media (max-width: 900px) {
-  .main-nav, .nav-actions { display: none; }
+  .nav-shell {
+    min-height: 0;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.55rem;
+    padding-block: 0.75rem;
+  }
+
+  .brand {
+    flex: 1 0 100%;
+    justify-content: center;
+  }
+
+  .main-nav {
+    display: flex;
+    flex: 1 1 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .main-nav a {
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(242, 191, 88, 0.08);
+    color: var(--ivory);
+    font-size: 0.9rem;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .nav-actions {
+    display: flex;
+    flex: 1 1 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .nav-actions .btn {
+    padding: 0.65rem 0.95rem;
+    font-size: 0.88rem;
+  }
+
+  .hero-inner,
+  .profile-hero-inner,
+  .contact-grid,
+  .two-column-layout,
+  .service-stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .feature-grid,
+  .credentials-grid,
+  .profile-page .project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .container {
+    width: min(var(--container), calc(100% - 1.25rem));
+  }
+
+  .nav-shell {
+    gap: 0.45rem;
+    padding-block: 0.6rem;
+  }
+
+  .brand {
+    gap: 0.6rem;
+  }
+
+  .brand-mark {
+    width: 2.35rem;
+    height: 2.35rem;
+    font-size: 0.85rem;
+  }
+
+  .brand strong {
+    font-size: 1rem;
+  }
+
+  .brand small {
+    font-size: 0.76rem;
+  }
+
+  .main-nav {
+    gap: 0.3rem;
+  }
+
+  .main-nav a {
+    padding: 0.48rem 0.62rem;
+    font-size: 0.82rem;
+  }
+
+  .nav-actions {
+    gap: 0.4rem;
+  }
+
+  .nav-actions .btn {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.82rem;
+  }
+
+  .hero {
+    min-height: auto;
+    padding-block: 4rem;
+  }
+
+  .hero-inner {
+    gap: 1.25rem;
+  }
+
+  .dual-grid,
+  .feature-grid,
+  .steps-grid,
+  .credentials-grid,
+  .experience-grid,
+  .profile-page .project-grid,
+  .footer-grid,
+  .field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .service-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .cta-row {
+    gap: 0.65rem;
+  }
+
+  .cta-row .btn {
+    padding: 0.75rem 1rem;
+  }
+
+  .contact-card,
+  .enquiry-form {
+    padding: 1.25rem;
+  }
 }

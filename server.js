@@ -10,6 +10,9 @@ const uploadsDir = path.join(rootDir, 'uploads');
 const dataDir = path.join(rootDir, 'data');
 const dataFile = path.join(dataDir, 'site-data.json');
 const port = process.env.PORT || 3000;
+const host = process.env.HOST || '127.0.0.1';
+const isProduction = process.env.NODE_ENV === 'production';
+const trustProxy = process.env.TRUST_PROXY === 'true';
 
 const roleNames = { electrician: 'Electrician', tailor: 'Tailor', developer: 'Developer' };
 const passwords = {
@@ -174,10 +177,17 @@ function getSession(req) {
   return sid ? (sessions.get(sid) || null) : null;
 }
 
-function setSession(res, role) {
+function isSecureRequest(req) {
+  const forwardedProtocol = trustProxy
+    ? String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase()
+    : '';
+  return Boolean(req.socket.encrypted) || forwardedProtocol === 'https';
+}
+
+function setSession(res, role, secure) {
   const sid = crypto.randomBytes(18).toString('hex');
   sessions.set(sid, { role, createdAt: Date.now() });
-  res.setHeader('Set-Cookie', `sessionId=${sid}; Path=/; HttpOnly; SameSite=Lax`);
+  res.setHeader('Set-Cookie', `sessionId=${sid}; Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
 }
 
 function readBody(req, maxBytes = 1_000_000) {
@@ -868,6 +878,11 @@ function renderDashboardPage(role) {
 }
 
 async function handleRequest(req, res) {
+  if (isProduction && !isSecureRequest(req)) {
+    res.setHeader('Cache-Control', 'no-store');
+    return sendHtml(res, '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>HTTPS required</title></head><body><h1>Secure connection required</h1><p>Configure a trusted HTTPS reverse proxy and set TRUST_PROXY=true before making this site public.</p></body></html>', 426);
+  }
+
   const url = new URL(req.url, 'http://localhost');
   const pathname = url.pathname;
 
@@ -878,7 +893,7 @@ async function handleRequest(req, res) {
     if (!role || !password || password !== (passwords[role] || '')) {
       return sendHtml(res, renderLoginPage('Incorrect password or role. Please try again.'), 401);
     }
-    setSession(res, role);
+    setSession(res, role, isProduction || isSecureRequest(req));
     return redirect(res, `/dashboard.html?role=${encodeURIComponent(role)}`);
   }
 
@@ -1106,6 +1121,6 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(port, '0.0.0.0', () => {
-  console.log(`Craft & Current running on port ${port}`);
+server.listen(port, host, () => {
+  console.log(`Craft & Current running at http://${host}:${port}`);
 });

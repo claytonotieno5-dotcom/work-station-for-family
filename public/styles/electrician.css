@@ -1,7 +1,13 @@
 .electrician-page .profile-hero {
-  background: linear-gradient(135deg, rgba(24,20,18,0.84), rgba(89,57,39,0.38));
+  background: linear-gradient(135deg, rgba(242,191,88,0.12), rgba(217,139,78,0.05));
 }
 
 .electrician-page .btn-primary {
-  background: linear-gradient(135deg, #d8a163, #a96d4a);
+  background: linear-gradient(135deg, #ffd36d, #e99a52);
+  color: #2b1d13;
+}
+
+.electrician-page .profile-copy .eyebrow,
+.electrician-page .text-link {
+  color: #ffd36d;
 }

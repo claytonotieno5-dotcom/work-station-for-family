@@ -1,7 +1,13 @@
 .developer-page .profile-hero {
-  background: linear-gradient(135deg, rgba(21,22,20,0.86), rgba(91,90,58,0.38));
+  background: linear-gradient(135deg, rgba(161,181,117,0.11), rgba(217,139,78,0.05));
 }
 
 .developer-page .btn-primary {
-  background: linear-gradient(135deg, #cab46e, #7a7343);
+  background: linear-gradient(135deg, #e3d38b, #b5bd77);
+  color: #292616;
+}
+
+.developer-page .profile-copy .eyebrow,
+.developer-page .text-link {
+  color: #d9df91;
 }

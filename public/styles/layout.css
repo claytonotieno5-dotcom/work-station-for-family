@@ -1,14 +1,34 @@
 .hero {
   position: relative;
   overflow: hidden;
-  min-height: 42rem;
+  min-height: min(46rem, calc(100svh - 5.2rem));
   display: flex;
   align-items: center;
 }
 
 .hero-home {
-  background: linear-gradient(135deg, rgba(18, 16, 15, 0.72), rgba(18, 16, 15, 0.92)),
-    url('/images/hero.jpg') center/cover no-repeat;
+  background:
+    url('/images/craft-watermark.svg') center / 340px 340px repeat,
+    radial-gradient(circle at 84% 18%, rgba(255, 245, 214, 0.72), transparent 32%),
+    linear-gradient(120deg, #efc676 0%, #dfa267 52%, #d98765 100%);
+}
+
+.hero-home .hero-copy .eyebrow {
+  color: #67421d;
+}
+
+.hero-home .hero-copy h1 {
+  color: #33251b;
+}
+
+.hero-home .hero-copy > p:not(.eyebrow) {
+  color: #503b2b;
+}
+
+.hero-home .btn-secondary {
+  color: #33251b;
+  background: rgba(255, 248, 228, 0.48);
+  border-color: rgba(75, 48, 27, 0.38);
 }
 
 .hero-inner {
@@ -17,16 +37,24 @@
   gap: 2rem;
   align-items: center;
   position: relative;
+  padding-block: 4rem;
 }
 
 .hero-copy {
-  max-width: 44rem;
+  max-width: 46rem;
+  padding: clamp(1.6rem, 3vw, 3rem);
+  border: 1px solid rgba(255,255,255,0.36);
+  border-radius: calc(var(--radius) + 8px);
+  background: rgba(255, 244, 221, 0.24);
+  box-shadow: 0 24px 60px rgba(71, 45, 23, 0.12);
+  backdrop-filter: blur(8px);
 }
 
 .lede {
   max-width: 38rem;
-  font-size: 1.08rem;
+  font-size: clamp(1.05rem, 1.4vw, 1.2rem);
   margin-top: 1rem;
+  line-height: 1.75;
 }
 
 .cta-row {
@@ -39,14 +67,26 @@
 .hero-card {
   display: grid;
   gap: 1rem;
+  max-width: 25rem;
+  justify-self: end;
+  width: 100%;
 }
 
 .mini-card {
-  background: rgba(25, 22, 20, 0.8);
-  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(48, 34, 24, 0.94), rgba(59, 39, 26, 0.9));
+  border: 1px solid rgba(255, 232, 188, 0.32);
   border-radius: var(--radius);
   padding: 1.2rem;
-  box-shadow: var(--shadow);
+  box-shadow: 0 18px 40px rgba(61, 37, 18, 0.2);
+  color: var(--ivory);
+}
+
+.mini-card strong {
+  display: block;
+  margin-top: 0.4rem;
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  line-height: 1.2;
 }
 
 .label, .panel-tag {
@@ -70,10 +110,33 @@
 .experience-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .info-card, .service-panel, .feature-card, .step, .credential-card, .project-card, .experience-card, .content-block, .timeline-item, .auth-form, .dashboard-sidebar, .dashboard-main, .contact-card, .enquiry-form {
-  background: rgba(32, 28, 24, 0.88);
-  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(57, 42, 30, 0.96), rgba(41, 31, 24, 0.96));
+  border: 1px solid rgba(255, 226, 184, 0.2);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+}
+
+.info-card,
+.feature-card,
+.step,
+.credential-card,
+.content-block {
+  position: relative;
+  overflow: hidden;
+}
+
+.info-card::before,
+.feature-card::before,
+.step::before,
+.credential-card::before,
+.content-block::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 1.4rem;
+  width: 3rem;
+  height: 2px;
+  background: linear-gradient(90deg, var(--gold), var(--terracotta));
 }
 
 .service-stack {
@@ -99,6 +162,14 @@
 
 .project-card {
   overflow: hidden;
+  transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
+  border: 1px solid rgba(255, 226, 184, 0.2);
+}
+
+.project-card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(242, 191, 88, 0.6);
+  box-shadow: 0 26px 58px rgba(15, 10, 6, 0.36);
 }
 
 .project-image {
@@ -108,6 +179,11 @@
   object-fit: cover;
   background-size: cover;
   background-position: center;
+  transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.project-card:hover .project-image {
+  transform: scale(1.035);
 }
 
 .project-copy {
@@ -139,6 +215,7 @@
 
 .profile-page .profile-hero {
   padding-top: 4rem;
+  padding-bottom: 2rem;
 }
 
 .profile-hero-inner {
@@ -146,12 +223,22 @@
   grid-template-columns: 0.9fr 1.1fr;
   gap: 2rem;
   align-items: center;
+  padding: clamp(1.5rem, 3vw, 3rem);
+  border: 1px solid rgba(255, 226, 184, 0.2);
+  border-radius: calc(var(--radius) + 8px);
+  background:
+    url('/images/craft-watermark.svg') right 1.5rem center / 240px 240px no-repeat,
+    linear-gradient(130deg, rgba(62, 43, 29, 0.96), rgba(38, 29, 23, 0.96));
+  box-shadow: var(--shadow);
 }
 
 .profile-media img {
   width: 100%;
+  max-height: 34rem;
+  object-fit: cover;
   border-radius: 2rem;
   box-shadow: var(--shadow);
+  border: 1px solid rgba(255, 232, 188, 0.24);
 }
 
 .meta-list {
@@ -162,7 +249,11 @@
 }
 
 .alt-panel {
-  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(155,110,67,0.05));
+  background:
+    linear-gradient(180deg, rgba(255, 226, 184, 0.035), rgba(155, 110, 67, 0.09)),
+    url('/images/craft-watermark.svg') right 2rem top 2rem / 220px 220px no-repeat;
+  border-top: 1px solid rgba(255, 226, 184, 0.12);
+  border-bottom: 1px solid rgba(255, 226, 184, 0.12);
 }
 
 .content-list {
@@ -343,11 +434,6 @@
   .service-stack,
   .footer-grid {
     grid-template-columns: 1fr;
-  }
-
-  .main-nav,
-  .nav-actions {
-    display: none;
   }
 
   .dual-grid,

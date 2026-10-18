@@ -1,0 +1,35 @@
+[1mdiff --git a/server.js b/server.js[m
+[1mindex a09b2e0..21bb356 100644[m
+[1m--- a/server.js[m
+[1m+++ b/server.js[m
+[36m@@ -4,7 +4,7 @@[m [mconst path = require('path');[m
+ const crypto = require('crypto');[m
+ const { URL } = require('url');[m
+ [m
+[31m-const rootDir = 'c:\\Users\\Admin\\Desktop\\WORK STATION FOR FAMILY';[m
+[32m+[m[32mconst rootDir = __dirname;[m
+ const publicDir = path.join(rootDir, 'public');[m
+ const uploadsDir = path.join(rootDir, 'uploads');[m
+ const dataDir = path.join(rootDir, 'data');[m
+[36m@@ -13,9 +13,9 @@[m [mconst port = process.env.PORT || 3000;[m
+ [m
+ const roleNames = { electrician: 'Electrician', tailor: 'Tailor', developer: 'Developer' };[m
+ const passwords = {[m
+[31m-  electrician: process.env.ELECTRICIAN_PASSWORD || 'ElectricianAdmin#2026',[m
+[31m-  tailor: process.env.TAILOR_PASSWORD || 'TailorAdmin#2026',[m
+[31m-  developer: process.env.DEVELOPER_PASSWORD || 'DeveloperAdmin#2026'[m
+[32m+[m[32m  electrician: process.env.ELECTRICIAN_PASSWORD,[m
+[32m+[m[32m  tailor: process.env.TAILOR_PASSWORD,[m
+[32m+[m[32m  developer: process.env.DEVELOPER_PASSWORD[m
+ };[m
+ [m
+ const defaultData = {[m
+[36m@@ -1106,6 +1106,6 @@[m [mconst server = http.createServer((req, res) => {[m
+   });[m
+ });[m
+ [m
+[31m-server.listen(port, () => {[m
+[31m-  console.log(`Craft & Current running at http://localhost:${port}`);[m
+[32m+[m[32mserver.listen(port, '0.0.0.0', () => {[m
+[32m+[m[32m  console.log(`Craft & Current running on port ${port}`);[m
+ });[m

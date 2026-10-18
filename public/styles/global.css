@@ -1,8 +1,12 @@
 body {
   background:
-    radial-gradient(circle at top, rgba(185, 138, 74, 0.2), transparent 30%),
-    var(--bg);
+    radial-gradient(ellipse at 14% 0%, rgba(242, 191, 88, 0.27), transparent 38%),
+    radial-gradient(ellipse at 92% 42%, rgba(228, 123, 92, 0.16), transparent 34%),
+    url('/images/craft-watermark.svg') 0 0 / 340px 340px repeat,
+    linear-gradient(145deg, #483222 0%, #33251b 52%, #402b1e 100%);
   color: var(--text);
+  min-height: 100vh;
+  line-height: 1.65;
 }
 
 .container {
@@ -27,6 +31,7 @@ h1, h2, h3, h4 {
 h1 { font-size: clamp(2.8rem, 5vw, 5rem); }
 h2 { font-size: clamp(2.1rem, 3vw, 3rem); }
 h3 { font-size: clamp(1.4rem, 2vw, 2rem); }
+h1, h2, h3, h4 { text-wrap: balance; }
 
 p { color: var(--muted); }
 
@@ -34,9 +39,10 @@ p { color: var(--muted); }
   position: sticky;
   top: 0;
   z-index: 40;
-  background: rgba(23,21,18,0.82);
+  background: rgba(27, 23, 19, 0.96);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
+  box-shadow: 0 12px 32px rgba(20, 13, 8, 0.22);
 }
 
 .nav-shell {
@@ -60,9 +66,10 @@ p { color: var(--muted); }
   width: 2.7rem;
   height: 2.7rem;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--gold), var(--bronze));
-  color: var(--bg);
+  background: linear-gradient(135deg, #ffe49a, var(--gold) 55%, var(--bronze));
+  color: #2b1d13;
   font-weight: 800;
+  box-shadow: 0 8px 20px rgba(242, 191, 88, 0.2), inset 0 0 0 1px rgba(255,255,255,0.3);
 }
 
 .brand strong {
@@ -82,13 +89,34 @@ p { color: var(--muted); }
 }
 
 .main-nav a {
+  position: relative;
   color: var(--muted);
+  font-weight: 600;
+  padding: 0.65rem 0.15rem;
   transition: color 0.2s ease;
+}
+
+.main-nav a::after {
+  content: "";
+  position: absolute;
+  right: 0.15rem;
+  bottom: 0.25rem;
+  left: 0.15rem;
+  height: 2px;
+  transform: scaleX(0);
+  transform-origin: left;
+  background: linear-gradient(90deg, var(--gold), var(--terracotta));
+  transition: transform 0.2s ease;
 }
 
 .main-nav a:hover,
 .main-nav a:focus-visible {
-  color: var(--ivory);
+  color: var(--gold);
+}
+
+.main-nav a:hover::after,
+.main-nav a:focus-visible::after {
+  transform: scaleX(1);
 }
 
 .nav-actions {
@@ -101,6 +129,28 @@ section {
   padding: clamp(4rem, 6vw, 7rem) 0;
 }
 
+.section-heading {
+  position: relative;
+}
+
+.section-heading h2 {
+  max-width: 18ch;
+}
+
+.section-heading .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-weight: 700;
+}
+
+.section-heading .eyebrow::before {
+  content: "";
+  width: 1.8rem;
+  height: 1px;
+  background: currentColor;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -110,6 +160,8 @@ section {
   border-radius: 999px;
   border: 1px solid transparent;
   font-weight: 600;
+  letter-spacing: 0.01em;
+  min-height: 2.9rem;
   transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
@@ -118,15 +170,15 @@ section {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--gold), var(--bronze));
-  color: #171512;
-  box-shadow: var(--shadow);
+  background: linear-gradient(135deg, var(--gold), #f0a65a);
+  color: #24190f;
+  box-shadow: 0 10px 24px rgba(209, 139, 58, 0.23);
 }
 
 .btn-secondary {
-  background: transparent;
+  background: rgba(242, 191, 88, 0.08);
   color: var(--ivory);
-  border-color: var(--line);
+  border-color: rgba(242, 191, 88, 0.45);
 }
 
 .text-link {
@@ -149,15 +201,21 @@ label {
 
 input, textarea, select {
   width: 100%;
-  border: 1px solid var(--line);
-  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255, 226, 184, 0.3);
+  background: rgba(255, 240, 213, 0.055);
   border-radius: 0.9rem;
   padding: 0.9rem 1rem;
   color: var(--text);
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: #cbb89f;
+  opacity: 1;
+}
+
 input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 3px solid var(--gold);
   outline-offset: 2px;
 }
 
@@ -169,6 +227,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
 footer {
   border-top: 1px solid var(--line);
   padding: 3rem 0 1rem;
+  background: rgba(24, 17, 12, 0.7);
 }
 
 .footer-grid {
