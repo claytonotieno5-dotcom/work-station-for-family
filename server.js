@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
 
-const rootDir = 'c:\\Users\\Admin\\Desktop\\WORK STATION FOR FAMILY';
+const rootDir = __dirname;
 const publicDir = path.join(rootDir, 'public');
 const uploadsDir = path.join(rootDir, 'uploads');
 const dataDir = path.join(rootDir, 'data');
@@ -13,9 +13,9 @@ const port = process.env.PORT || 3000;
 
 const roleNames = { electrician: 'Electrician', tailor: 'Tailor', developer: 'Developer' };
 const passwords = {
-  electrician: process.env.ELECTRICIAN_PASSWORD || 'ElectricianAdmin#2026',
-  tailor: process.env.TAILOR_PASSWORD || 'TailorAdmin#2026',
-  developer: process.env.DEVELOPER_PASSWORD || 'DeveloperAdmin#2026'
+  electrician: process.env.ELECTRICIAN_PASSWORD,
+  tailor: process.env.TAILOR_PASSWORD,
+  developer: process.env.DEVELOPER_PASSWORD
 };
 
 const defaultData = {
@@ -1106,6 +1106,6 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(port, () => {
-  console.log(`Craft & Current running at http://localhost:${port}`);
+server.listen(port, '0.0.0.0', () => {
+  console.log(`Craft & Current running on port ${port}`);
 });
