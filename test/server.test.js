@@ -46,6 +46,8 @@ test('Express app serves site routes and preserves form, upload, and authenticat
   const dashboardWithoutSession = await fetch(`${baseUrl}/dashboard.html?role=electrician`, { redirect: 'manual' });
   assert.equal(dashboardWithoutSession.status, 302);
   assert.equal(dashboardWithoutSession.headers.get('location'), '/login.html');
+  const notificationsWithoutSession = await fetch(`${baseUrl}/api/notifications?role=electrician`);
+  assert.equal(notificationsWithoutSession.status, 401);
 
   const invalidEnquiry = await fetch(`${baseUrl}/enquiry`, {
     method: 'POST',
@@ -53,6 +55,11 @@ test('Express app serves site routes and preserves form, upload, and authenticat
     body: 'role=electrician&contact_method=Email&customer_contact=invalid&customer_name=A&subject=B&message=C'
   });
   assert.equal(invalidEnquiry.status, 400);
+
+  const electricianPage = await fetch(`${baseUrl}/electrician.html`);
+  assert.equal(electricianPage.status, 200);
+  const pageHtml = await electricianPage.text();
+  assert.doesNotMatch(pageHtml, /name=["']budget["']/i);
 
   const enquiry = await fetch(`${baseUrl}/enquiry`, {
     method: 'POST',
@@ -63,7 +70,8 @@ test('Express app serves site routes and preserves form, upload, and authenticat
       customer_contact: 'customer@example.com',
       customer_name: 'Test Customer',
       subject: 'Electrical repair',
-      message: 'Please call to arrange a visit.'
+      message: 'Please call to arrange a visit.',
+      budget: '250000'
     }),
     redirect: 'manual'
   });
@@ -73,6 +81,25 @@ test('Express app serves site routes and preserves form, upload, and authenticat
   const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   assert.equal(data.enquiries.length, 1);
   assert.equal(data.enquiries[0].customer_name, 'Test Customer');
+  assert.ok(!Object.prototype.hasOwnProperty.call(data.enquiries[0], 'budget'));
+
+  const privateConversation = await fetch(`${baseUrl}/conversation`, {
+    method: 'POST',
+    headers: {
+      Origin: baseUrl,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({
+      role: 'electrician',
+      customer_name: 'Test Customer',
+      customer_contact: 'customer@example.com',
+      message: 'Please let me know when you can visit.'
+    }),
+    redirect: 'manual'
+  });
+  assert.equal(privateConversation.status, 302);
+  const conversationData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+  const conversationId = conversationData.conversations[0].id;
 
   const login = await fetch(`${baseUrl}/login`, {
     method: 'POST',
@@ -87,7 +114,45 @@ test('Express app serves site routes and preserves form, upload, and authenticat
     redirect: 'manual'
   });
   assert.equal(dashboard.status, 200);
-  assert.match(await dashboard.text(), /Enquiries \(1\)/);
+  const dashboardHtml = await dashboard.text();
+  assert.match(dashboardHtml, /Enquiries \(1\)/);
+  assert.match(dashboardHtml, /Notifications/);
+  assert.match(dashboardHtml, /Security activity/);
+  assert.match(dashboardHtml, /New inquiry: Electrical repair/);
+  assert.match(dashboardHtml, /New private message from Test Customer/);
+
+  const notificationResponse = await fetch(`${baseUrl}/api/notifications?role=electrician`, {
+    headers: { Cookie: cookie }
+  });
+  assert.equal(notificationResponse.status, 200);
+  assert.deepEqual(await notificationResponse.json(), {
+    pending_inquiries: 1,
+    unread_messages: 1,
+    total: 2
+  });
+  const markRead = await fetch(`${baseUrl}/dashboard/electrician/mark-read`, {
+    method: 'POST',
+    headers: {
+      Cookie: cookie,
+      Origin: baseUrl,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({ conversation_id: conversationId }),
+    redirect: 'manual'
+  });
+  assert.equal(markRead.status, 302);
+  const refreshedNotifications = await fetch(`${baseUrl}/api/notifications?role=electrician`, {
+    headers: { Cookie: cookie }
+  });
+  assert.deepEqual(await refreshedNotifications.json(), {
+    pending_inquiries: 1,
+    unread_messages: 0,
+    total: 1
+  });
+  const crossRoleNotifications = await fetch(`${baseUrl}/api/notifications?role=tailor`, {
+    headers: { Cookie: cookie }
+  });
+  assert.equal(crossRoleNotifications.status, 401);
 
   const boundary = 'craft-current-test-boundary';
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
@@ -143,6 +208,9 @@ test('Express app serves site routes and preserves form, upload, and authenticat
     redirect: 'manual'
   });
   assert.equal(csrfRejected.status, 403);
+  const auditData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+  assert.ok(auditData.security_events.some((event) => event.event === 'dashboard_request_origin_rejected'));
+  assert.ok(auditData.security_events.every((event) => !Object.prototype.hasOwnProperty.call(event, 'password')));
 
   const logout = await fetch(`${baseUrl}/logout`, {
     headers: { Cookie: cookie },
@@ -171,6 +239,9 @@ test('Express app serves site routes and preserves form, upload, and authenticat
     redirect: 'manual'
   });
   assert.equal(rateLimitedLogin.status, 429);
+  const finalAuditData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+  assert.ok(finalAuditData.security_events.some((event) => event.event === 'login_failed'));
+  assert.ok(finalAuditData.security_events.some((event) => event.event === 'login_rate_limited'));
 });
 
 test('Vercel production config requires database and Blob but not local upload or proxy settings', () => {

@@ -172,7 +172,9 @@ const defaultData = {
       { title: 'Family services website', description: 'A premium brochure and services platform built to showcase professional offerings and lead generation.', category: 'Web Development', image: '/images/project-developer.svg' }
     ]
   },
-  enquiries: []
+  enquiries: [],
+  conversations: [],
+  security_events: []
 };
 
 async function initializeDatabase() {
@@ -257,6 +259,40 @@ function normalizeData(data) {
   data.enquiries = Array.isArray(data.enquiries) ? data.enquiries : [];
   data.services = data.services || {};
   data.projects = data.projects || {};
+  data.conversations = Array.isArray(data.conversations) ? data.conversations : [];
+  data.security_events = Array.isArray(data.security_events) ? data.security_events : [];
+  for (const enquiry of data.enquiries) {
+    if (!enquiry.id) {
+      enquiry.id = crypto.randomBytes(12).toString('hex');
+      changed = true;
+    }
+    if (!enquiry.status) {
+      enquiry.status = 'Received';
+      enquiry.status_history = Array.isArray(enquiry.status_history) ? enquiry.status_history : [{ status: 'Received', created_at: enquiry.created_at || new Date().toISOString() }];
+      enquiry.responses = Array.isArray(enquiry.responses) ? enquiry.responses : [];
+      changed = true;
+    }
+    if (Object.prototype.hasOwnProperty.call(enquiry, 'budget')) {
+      delete enquiry.budget;
+      changed = true;
+    }
+    if (!Array.isArray(enquiry.status_history)) {
+      enquiry.status_history = [{ status: enquiry.status, created_at: enquiry.created_at || new Date().toISOString() }];
+      changed = true;
+    }
+    if (!Array.isArray(enquiry.responses)) {
+      enquiry.responses = [];
+      changed = true;
+    }
+    if (!enquiry.updated_at) {
+      enquiry.updated_at = enquiry.created_at || new Date().toISOString();
+      changed = true;
+    }
+    if (enquiry.status_history.length && enquiry.status_history[enquiry.status_history.length - 1].status !== enquiry.status) {
+      enquiry.status_history.push({ status: enquiry.status, created_at: enquiry.updated_at || new Date().toISOString() });
+      changed = true;
+    }
+  }
   for (const role of Object.keys(roleNames)) {
     data.services[role] = Array.isArray(data.services[role]) ? data.services[role] : [];
     data.projects[role] = Array.isArray(data.projects[role]) ? data.projects[role] : [];
@@ -271,7 +307,137 @@ function normalizeData(data) {
       }
     });
   }
+  for (const conversation of data.conversations) {
+    if (!Array.isArray(conversation.messages)) {
+      conversation.messages = [];
+      changed = true;
+    }
+    if (!Array.isArray(conversation.participants)) {
+      conversation.participants = [];
+      changed = true;
+    }
+  }
   return { data, changed };
+}
+
+function getConfiguredTimezone() {
+  return process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
+function formatDateKey(date, timeZone = getConfiguredTimezone()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const parts = formatter.formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value || '0000';
+  const month = parts.find((part) => part.type === 'month')?.value || '01';
+  const day = parts.find((part) => part.type === 'day')?.value || '01';
+  return `${year}-${month}-${day}`;
+}
+
+function dateKeyToUtc(dateKey) {
+  const [year, month, day] = String(dateKey || '1970-01-01').split('-').map(Number);
+  return new Date(Date.UTC(year, (month || 1) - 1, day || 1));
+}
+
+function daysBetween(dateA, dateB) {
+  const ms = dateKeyToUtc(dateA).getTime() - dateKeyToUtc(dateB).getTime();
+  return Math.round(ms / 86400000);
+}
+
+function buildUsageStatistics(data) {
+  const timezone = getConfiguredTimezone();
+  const allInquiries = Array.isArray(data.enquiries) ? data.enquiries : [];
+  const todayKey = formatDateKey(new Date(), timezone);
+  const thisMonth = new Date();
+  const countInRange = (predicate) => allInquiries.filter((inquiry) => {
+    const createdAt = inquiry.created_at ? new Date(inquiry.created_at) : null;
+    if (!(createdAt instanceof Date) || Number.isNaN(createdAt.getTime())) return false;
+    return predicate(createdAt, inquiry);
+  }).length;
+
+  const totalUsers = Object.keys(data.profiles || {}).length;
+  const totalInquiries = allInquiries.length;
+  const todayInquiries = countInRange((date) => formatDateKey(date, timezone) === todayKey);
+  const thisWeek = countInRange((date) => Math.abs(daysBetween(formatDateKey(date, timezone), todayKey)) <= 6);
+  const thisMonthCount = countInRange((date) => {
+    const created = date.getTime();
+    return created >= new Date(thisMonth.getFullYear(), thisMonth.getMonth(), 1).getTime() && created <= thisMonth.getTime();
+  });
+  const thisYearCount = countInRange((date) => {
+    const yearStart = new Date(thisMonth.getFullYear(), 0, 1);
+    const yearEnd = new Date(thisMonth.getFullYear(), 11, 31, 23, 59, 59, 999);
+    return date.getTime() >= yearStart.getTime() && date.getTime() <= yearEnd.getTime();
+  });
+
+  const dailyTrend = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - (6 - index));
+    const key = formatDateKey(date, timezone);
+    const value = allInquiries.filter((inquiry) => inquiry.created_at && formatDateKey(new Date(inquiry.created_at), timezone) === key).length;
+    return { label: `${date.toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: timezone })}`, value };
+  });
+
+  const weeklyTrend = Array.from({ length: 8 }, (_, index) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - (7 * (7 - index)));
+    const startKey = formatDateKey(date, timezone);
+    const endDate = new Date(date);
+    endDate.setDate(date.getDate() + 6);
+    const endKey = formatDateKey(endDate, timezone);
+    const value = allInquiries.filter((inquiry) => {
+      if (!inquiry.created_at) return false;
+      const inquiryDateKey = formatDateKey(new Date(inquiry.created_at), timezone);
+      return daysBetween(inquiryDateKey, startKey) >= 0 && daysBetween(inquiryDateKey, endKey) <= 0;
+    }).length;
+    return { label: `${startKey.slice(5)}–${endKey.slice(5)}`, value };
+  }).slice(1);
+
+  const monthlyTrend = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - (11 - index));
+    const label = date.toLocaleString('en-US', { month: 'short', year: '2-digit', timeZone: timezone });
+    const value = allInquiries.filter((inquiry) => {
+      if (!inquiry.created_at) return false;
+      const inquiryDate = new Date(inquiry.created_at);
+      return inquiryDate.getFullYear() === date.getFullYear() && inquiryDate.getMonth() === date.getMonth();
+    }).length;
+    return { label, value };
+  });
+
+  const yearlyTrend = Array.from({ length: 5 }, (_, index) => {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - (4 - index));
+    const label = String(date.getFullYear());
+    const value = allInquiries.filter((inquiry) => {
+      if (!inquiry.created_at) return false;
+      const inquiryDate = new Date(inquiry.created_at);
+      return inquiryDate.getFullYear() === date.getFullYear();
+    }).length;
+    return { label, value };
+  });
+
+  return {
+    timezone,
+    registered_users: totalUsers,
+    total_inquiries: totalInquiries,
+    inquiries_today: todayInquiries,
+    inquiries_this_week: thisWeek,
+    inquiries_this_month: thisMonthCount,
+    inquiries_this_year: thisYearCount,
+    trends: {
+      daily: dailyTrend,
+      weekly: weeklyTrend,
+      monthly: monthlyTrend,
+      yearly: yearlyTrend
+    }
+  };
 }
 
 async function loadData() {
@@ -636,6 +802,54 @@ function sendJson(res, body, status = 200) {
   res.end(JSON.stringify(body));
 }
 
+function normalizeMessageText(value, maxLength = 2000) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function buildConversationSummary(conversation, role) {
+  const unreadCount = (conversation.messages || []).filter((message) => {
+    if (message.sender === role) return false;
+    return !Array.isArray(message.read_by) || !message.read_by.includes(role);
+  }).length;
+  return {
+    id: conversation.id,
+    role: conversation.role,
+    customer_name: conversation.customer_name,
+    customer_contact: conversation.customer_contact,
+    updated_at: conversation.updated_at || conversation.created_at,
+    unread_count: unreadCount,
+    messages: conversation.messages || []
+  };
+}
+
+function getSecuritySourceHash(req) {
+  const forwardedAddress = trustProxy ? String(req.headers['x-forwarded-for'] || '').split(',').pop().trim() : '';
+  const address = forwardedAddress || req.socket.remoteAddress || 'unknown';
+  return crypto.createHmac('sha256', sessionSecret).update(address).digest('hex').slice(0, 16);
+}
+
+async function recordSecurityEvent(req, event, role = '') {
+  const entry = {
+    id: crypto.randomBytes(8).toString('hex'),
+    event,
+    role: roleNames[role] ? role : 'unknown',
+    source_hash: getSecuritySourceHash(req),
+    created_at: new Date().toISOString()
+  };
+  await updateData((data) => {
+    data.security_events = Array.isArray(data.security_events) ? data.security_events : [];
+    data.security_events.push(entry);
+    if (data.security_events.length > 500) data.security_events.splice(0, data.security_events.length - 500);
+  });
+}
+
+function countUnreadMessages(conversation, role) {
+  return (conversation.messages || []).filter((message) =>
+    message.sender !== role &&
+    (!Array.isArray(message.read_by) || !message.read_by.includes(role))
+  ).length;
+}
+
 async function renderHomePage() {
   const data = await loadData();
   const projectCards = ['electrician', 'tailor']
@@ -791,6 +1005,21 @@ async function renderHomePage() {
       </div>
     </section>
 
+    <section class="section stats-section">
+      <div class="container">
+        <div class="section-heading reveal">
+          <p class="eyebrow">Service statistics</p>
+          <h2>Public performance dashboard</h2>
+        </div>
+        <div id="usage-stats" class="stats-grid reveal" aria-live="polite">
+          <div class="stat-card"><span>Total registered users</span><strong>Loading…</strong></div>
+          <div class="stat-card"><span>Total inquiries</span><strong>Loading…</strong></div>
+          <div class="stat-card"><span>Inquiries today</span><strong>Loading…</strong></div>
+          <div class="stat-card"><span>Inquiries this week</span><strong>Loading…</strong></div>
+        </div>
+      </div>
+    </section>
+
     <section class="section credentials">
       <div class="container">
         <div class="section-heading reveal">
@@ -851,11 +1080,16 @@ async function renderHomePage() {
           </div>
           <label><span>How should they contact you?</span><select name="contact_method" required><option value="WhatsApp">WhatsApp</option><option value="Email">Email</option></select></label>
           <label><span>Your WhatsApp number or email address</span><input type="text" name="customer_contact" maxlength="254" placeholder="Enter your WhatsApp number or email" required /></label>
+          <label><span>Service location</span><input type="text" name="service_location" maxlength="180" placeholder="Address, landmark, town, or nearby area" /></label>
+          <input type="hidden" name="location_source" value="manual" />
+          <div class="field-grid">
+            <button type="button" class="btn btn-secondary use-location-btn" aria-label="Use current browser location for the service request" title="This uses browser geolocation only to help describe the service area. We do not publish exact coordinates.">Use current location</button>
+          </div>
+          <small class="field-help">We use location only to plan the service and never publish precise home coordinates or private addresses.</small>
           <label><span>Subject</span><input type="text" name="subject" placeholder="Electrical repair or tailoring request" required /></label>
           <label><span>Project details</span><textarea name="message" rows="5" placeholder="Please share your project details..." required></textarea></label>
           <div class="field-grid">
             <label><span>Preferred date</span><input type="date" name="date" /></label>
-            <label><span>Budget</span><input type="text" name="budget" placeholder="Optional" /></label>
           </div>
           <button type="submit" class="btn btn-primary">Send enquiry</button>
         </form>
@@ -904,7 +1138,8 @@ async function renderProfilePage(role, enquirySent = false) {
     return `<article class="project-card reveal"><img class="project-image" src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" /><div class="project-copy"><span class="panel-tag">${escapeHtml(item.category || 'Project')}</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.description)}</p><section class="project-comments" aria-label="Comments on ${escapeHtml(item.title)}"><h4>Appreciate this work</h4>${comments ? `<ul class="comment-list">${comments}</ul>` : '<p class="empty-comments">No comments yet. Be the first to appreciate this work.</p>'}<form method="POST" action="/comment" class="comment-form"><input type="hidden" name="role" value="${escapeHtml(role)}" /><input type="hidden" name="project_id" value="${escapeHtml(item.id)}" /><label><span>Your name</span><input type="text" name="name" maxlength="80" required /></label><label><span>Your comment</span><textarea name="text" rows="3" maxlength="1000" required></textarea></label><button type="submit" class="btn btn-secondary">Post comment</button></form></section></div></article>`;
   }).join('');
 
-  const enquiryForm = `<form class="enquiry-form reveal" method="POST" action="/enquiry"><input type="hidden" name="role" value="${escapeHtml(role)}" /><label><span>Your name</span><input type="text" name="customer_name" maxlength="100" required /></label><label><span>How should ${role === 'tailor' ? 'the tailor' : role === 'electrician' ? 'the electrician' : 'the developer'} contact you?</span><select name="contact_method" required><option value="WhatsApp">WhatsApp</option><option value="Email">Email</option></select></label><label><span>Your WhatsApp number or email address</span><input type="text" name="customer_contact" maxlength="254" autocomplete="email" placeholder="Enter your WhatsApp number or email" required /></label><label><span>${role === 'tailor' ? 'Garment or service required' : role === 'electrician' ? 'Project or service' : 'Project required'}</span><input type="text" name="subject" maxlength="160" required /></label><label><span>Project details</span><textarea name="message" rows="5" maxlength="3000" required></textarea></label>${role === 'tailor' ? '<div class="field-grid"><label><span>Preferred date</span><input type="date" name="date" /></label><label><span>Budget range</span><input type="text" name="budget" maxlength="100" /></label></div>' : ''}<button class="btn btn-primary" type="submit">Send enquiry</button></form>`;
+  const enquiryForm = `<form class="enquiry-form reveal" method="POST" action="/enquiry"><input type="hidden" name="role" value="${escapeHtml(role)}" /><label><span>Your name</span><input type="text" name="customer_name" maxlength="100" required /></label><label><span>How should ${role === 'tailor' ? 'the tailor' : role === 'electrician' ? 'the electrician' : 'the developer'} contact you?</span><select name="contact_method" required><option value="WhatsApp">WhatsApp</option><option value="Email">Email</option></select></label><label><span>Your WhatsApp number or email address</span><input type="text" name="customer_contact" maxlength="254" autocomplete="email" placeholder="Enter your WhatsApp number or email" required /></label><label><span>${role === 'tailor' ? 'Garment or service required' : role === 'electrician' ? 'Project or service' : 'Project required'}</span><input type="text" name="subject" maxlength="160" required /></label><label><span>Project details</span><textarea name="message" rows="5" maxlength="3000" required></textarea></label>${role === 'tailor' ? '<div class="field-grid"><label><span>Preferred date</span><input type="date" name="date" /></label></div>' : ''}<button class="btn btn-primary" type="submit">Send enquiry</button></form>`;
+  const messageForm = `<form class="enquiry-form reveal" method="POST" action="/conversation"><input type="hidden" name="role" value="${escapeHtml(role)}" /><label><span>Your name</span><input type="text" name="customer_name" maxlength="80" required /></label><label><span>Preferred contact</span><input type="text" name="customer_contact" maxlength="254" placeholder="WhatsApp number or email" required /></label><label><span>Private message</span><textarea name="message" rows="4" maxlength="2000" required></textarea></label><button class="btn btn-secondary" type="submit">Open private conversation</button></form>`;
   const contactForm = enquiryForm;
 
   return `<!DOCTYPE html>
@@ -998,6 +1233,7 @@ async function renderProfilePage(role, enquirySent = false) {
           </ul>
         </div>
         ${contactForm}
+        ${messageForm}
       </div>
     </section>
   </main>
@@ -1068,14 +1304,55 @@ async function renderDashboardPage(role) {
   const services = data.services[role] || [];
   const projects = data.projects[role] || [];
   const enquiries = data.enquiries.filter((item) => item.role === role).slice().reverse();
+  const pendingEnquiries = enquiries.filter((item) => (item.status || 'Received') === 'Received');
+  const statusOptions = ['Received', 'Under Review', 'Provider Responded', 'In Discussion', 'Agreed', 'Completed', 'Declined', 'Cancelled', 'Closed'];
   const enquiryList = enquiries.length
     ? enquiries.map((item) => {
       const contactLink = item.contact_method === 'WhatsApp'
         ? `https://wa.me/${whatsappNumber(item.customer_contact)}`
         : `mailto:${encodeURIComponent(item.customer_contact || '')}`;
-      return `<article class="enquiry-item"><div class="enquiry-heading"><h4>${escapeHtml(item.subject || 'Service enquiry')}</h4><time>${escapeHtml(item.created_at ? new Date(item.created_at).toLocaleString() : '')}</time></div><p><strong>${escapeHtml(item.customer_name)}</strong> — ${escapeHtml(item.message)}</p><p>Preferred contact: <a href="${contactLink}" ${item.contact_method === 'WhatsApp' ? 'target="_blank" rel="noreferrer"' : ''}>${escapeHtml(item.contact_method)}: ${escapeHtml(item.customer_contact)}</a></p>${item.date ? `<p>Preferred date: ${escapeHtml(item.date)}</p>` : ''}${item.budget ? `<p>Budget: ${escapeHtml(item.budget)}</p>` : ''}</article>`;
+      const statusHistory = Array.isArray(item.status_history) && item.status_history.length
+        ? item.status_history.map((step) => `<li>${escapeHtml(step.status)} · ${escapeHtml(new Date(step.created_at).toLocaleString())}</li>`).join('')
+        : `<li>${escapeHtml(item.status || 'Received')} · ${escapeHtml(new Date(item.created_at || Date.now()).toLocaleString())}</li>`;
+      const responses = Array.isArray(item.responses) && item.responses.length
+        ? item.responses.map((response) => `<li><strong>${escapeHtml(roleNames[response.provider_role] || response.provider_role)}</strong> — ${escapeHtml(response.message)} <small>${escapeHtml(new Date(response.created_at).toLocaleString())}</small></li>`).join('')
+        : '<li>No provider response yet.</li>';
+      return `<article class="enquiry-item" id="inquiry-${escapeHtml(item.id || '')}"><div class="enquiry-heading"><h4>${escapeHtml(item.subject || 'Service enquiry')}</h4><time>${escapeHtml(item.created_at ? new Date(item.created_at).toLocaleString() : '')}</time></div><p><strong>${escapeHtml(item.customer_name)}</strong> — ${escapeHtml(item.message)}</p><p>Preferred contact: <a href="${contactLink}" ${item.contact_method === 'WhatsApp' ? 'target="_blank" rel="noreferrer"' : ''}>${escapeHtml(item.contact_method)}: ${escapeHtml(item.customer_contact)}</a></p>${item.service_location ? `<p>Service location: ${escapeHtml(item.service_location)}</p>` : ''}${item.date ? `<p>Preferred date: ${escapeHtml(item.date)}</p>` : ''}<div class="status-strip"><label><span>Status</span><form method="POST" action="/dashboard/${escapeHtml(role)}/update-status"><input type="hidden" name="inquiry_id" value="${escapeHtml(item.id || '')}" /><select name="status">${statusOptions.map((option) => `<option value="${escapeHtml(option)}" ${option === (item.status || 'Received') ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select><button class="btn btn-secondary" type="submit">Update</button></form></label></div><div class="activity-box"><h5>Responses</h5><ul>${responses}</ul></div><form method="POST" action="/dashboard/${escapeHtml(role)}/respond-enquiry" class="response-form"><input type="hidden" name="inquiry_id" value="${escapeHtml(item.id || '')}" /><label><span>Provider response</span><textarea name="response" rows="2" maxlength="2000" required></textarea></label><button class="btn btn-primary" type="submit">Send response</button></form><div class="activity-box"><h5>Status history</h5><ul>${statusHistory}</ul></div></article>`;
     }).join('')
     : '<p class="empty-comments">No enquiries received yet.</p>';
+
+  const conversations = (data.conversations || []).filter((item) => item.role === role).slice().reverse();
+  const conversationList = conversations.length
+    ? conversations.map((conversation) => {
+        const messages = Array.isArray(conversation.messages) ? conversation.messages : [];
+        const lastMessage = messages[messages.length - 1];
+        const unreadCount = countUnreadMessages(conversation, role);
+        return `<article class="enquiry-item" id="conversation-${escapeHtml(conversation.id || '')}"><div class="enquiry-heading"><h4>${escapeHtml(conversation.customer_name || 'Customer conversation')}</h4><time>${escapeHtml(conversation.updated_at ? new Date(conversation.updated_at).toLocaleString() : '')}</time></div><p>${unreadCount ? `<strong>${unreadCount} unread</strong> · ` : ''}${escapeHtml(lastMessage ? lastMessage.body : 'No messages yet')}</p>${unreadCount ? `<form method="POST" action="/dashboard/${escapeHtml(role)}/mark-read" class="notification-action-form"><input type="hidden" name="conversation_id" value="${escapeHtml(conversation.id || '')}" /><button class="btn btn-secondary" type="submit">Mark messages as read</button></form>` : ''}<form method="POST" action="/dashboard/${escapeHtml(role)}/respond-message" class="response-form"><input type="hidden" name="conversation_id" value="${escapeHtml(conversation.id || '')}" /><label><span>Reply</span><textarea name="message" rows="2" maxlength="2000" required></textarea></label><button class="btn btn-secondary" type="submit">Reply privately</button></form></article>`;
+      }).join('')
+    : '<p class="empty-comments">No private conversations yet.</p>';
+  const unreadMessageCount = conversations.reduce((total, conversation) => total + countUnreadMessages(conversation, role), 0);
+  const notificationCount = pendingEnquiries.length + unreadMessageCount;
+  const notificationItems = [
+    ...pendingEnquiries.map((item) => ({
+      href: `#inquiry-${encodeURIComponent(item.id || '')}`,
+      label: `New inquiry: ${item.subject || 'Service inquiry'}`,
+      time: item.created_at || ''
+    })),
+    ...conversations
+      .filter((conversation) => countUnreadMessages(conversation, role) > 0)
+      .map((conversation) => ({
+        href: `#conversation-${encodeURIComponent(conversation.id || '')}`,
+        label: `New private message from ${conversation.customer_name || 'a customer'}`,
+        time: conversation.updated_at || conversation.created_at || ''
+      }))
+  ].sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0)).slice(0, 10);
+  const notificationList = notificationItems.length
+    ? notificationItems.map((item) => `<li><a href="${escapeHtml(item.href)}">${escapeHtml(item.label)}</a><time>${escapeHtml(item.time ? new Date(item.time).toLocaleString() : '')}</time></li>`).join('')
+    : '<li class="empty-comments">No new inquiry or message notifications.</li>';
+  const securityEvents = (data.security_events || []).slice(-20).reverse();
+  const securityEventList = securityEvents.length
+    ? securityEvents.map((event) => `<li><strong>${escapeHtml(String(event.event || 'security event').replace(/_/g, ' '))}</strong> · ${escapeHtml(event.role || 'unknown')} · source ${escapeHtml(event.source_hash || 'unavailable')} · ${escapeHtml(new Date(event.created_at).toLocaleString())}</li>`).join('')
+    : '<li class="empty-comments">No security events logged.</li>';
 
   const serviceList = services.map((item) => `
     <li>
@@ -1128,8 +1405,31 @@ async function renderDashboardPage(role) {
       <section class="dashboard-main reveal">
         <div class="dashboard-header">
           <div><p class="eyebrow">Dashboard</p><h1>${escapeHtml(profile.name || 'Update profile')}</h1></div>
-          <a class="btn btn-secondary" href="/" target="_blank" rel="noreferrer">Preview site</a>
+          <div class="dashboard-actions">
+            <a class="btn btn-primary notification-button" href="#notifications" aria-label="Notifications, ${notificationCount} pending updates">
+              Notifications <span class="notification-badge" id="notification-count" aria-live="polite">${notificationCount}</span>
+            </a>
+            <a class="btn btn-secondary" href="/" target="_blank" rel="noreferrer">Preview site</a>
+          </div>
         </div>
+
+        <div class="dashboard-metrics">
+          <div class="metric-card"><span>Total inquiries</span><strong>${escapeHtml(String(enquiries.length))}</strong></div>
+          <div class="metric-card"><span>Today</span><strong>${escapeHtml(String(enquiries.filter((item) => item.created_at && new Date(item.created_at).toDateString() === new Date().toDateString()).length))}</strong></div>
+          <div class="metric-card"><span>This week</span><strong>${escapeHtml(String(enquiries.filter((item) => item.created_at && Date.now() - new Date(item.created_at).getTime() <= 7 * 24 * 60 * 60 * 1000).length))}</strong></div>
+        </div>
+
+        <section class="dashboard-section notification-section" id="notifications" aria-labelledby="notifications-heading">
+          <h3 id="notifications-heading">Notifications</h3>
+          <p>New inquiries awaiting review and incoming private messages for your service.</p>
+          <ul class="notification-list">${notificationList}</ul>
+        </section>
+
+        <section class="dashboard-section security-events-section" id="security-events" aria-labelledby="security-events-heading">
+          <h3 id="security-events-heading">Security activity</h3>
+          <p>Recent authentication and access-denial events. Source identifiers are one-way hashes; passwords and message contents are never logged.</p>
+          <ul class="security-event-list">${securityEventList}</ul>
+        </section>
 
         <form method="POST" action="/dashboard/${escapeHtml(role)}/save" class="dashboard-form">
           <input type="hidden" name="section" value="profile" />
@@ -1195,6 +1495,12 @@ async function renderDashboardPage(role) {
         </div>
 
         <div class="dashboard-section enquiries-section">
+          <h3>Private conversations (${conversations.length})</h3>
+          <p>Customers can start a separate private conversation with your team.</p>
+          <div class="enquiry-list">${conversationList}</div>
+        </div>
+
+        <div class="dashboard-section enquiries-section">
           <h3>Enquiries (${enquiries.length})</h3>
           <p>Only you can see enquiries sent to your profile.</p>
           <div class="enquiry-list">${enquiryList}</div>
@@ -1206,6 +1512,7 @@ async function renderDashboardPage(role) {
     <div class="container footer-grid"><div><div class="brand footer-brand"><span class="brand-mark">C&C</span><div><strong>Craft & Current</strong><small>Professional Services</small></div></div><p>Professional service dashboard and portfolio management.</p></div><div><h4>Services</h4><ul><li><a href="/electrician.html">Electrical services</a></li><li><a href="/tailoring.html">Tailoring & fashion</a></li><li><a href="/developer.html">Developer services</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="tel:0721909801">0721909801</a></li><li><a href="mailto:hello@craftandcurrent.co.ke">hello@craftandcurrent.co.ke</a></li></ul></div></div>
     <div class="container footer-bottom"><p>© 2026 Craft & Current. All rights reserved.</p></div>
   </footer>
+  <script>window.dashboardRole = ${JSON.stringify(role)};</script>
   <script src="/js/main.js"></script>
 </body>
 </html>`;
@@ -1243,13 +1550,16 @@ async function handleRequest(req, res) {
     const role = body.role;
     const password = body.password || '';
     if (!await recordLoginAttempt(req)) {
+      await recordSecurityEvent(req, 'login_rate_limited', role);
       return sendHtml(res, renderLoginPage('Too many login attempts. Please wait 15 minutes before trying again.'), 429);
     }
     if (!roleNames[role] || !password || password !== (passwords[role] || '')) {
+      await recordSecurityEvent(req, 'login_failed', role);
       return sendHtml(res, renderLoginPage('Incorrect password or role. Please try again.'), 401);
     }
     await clearLoginAttempts(req);
     await setSession(res, role, isProduction || isSecureRequest(req));
+    await recordSecurityEvent(req, 'login_succeeded', role);
     return redirect(res, `/dashboard.html?role=${encodeURIComponent(role)}`);
   }
 
@@ -1273,25 +1583,35 @@ async function handleRequest(req, res) {
     const contactIsValid = body.contact_method === 'WhatsApp'
       ? /^[+()\d\s-]{7,24}$/.test(body.customer_contact || '') && /\d/.test(body.customer_contact || '')
       : body.contact_method === 'Email' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.customer_contact || '');
+    const serviceLocation = normalizeMessageText(body.service_location || '', 180);
     if (!roleNames[body.role] || !['WhatsApp', 'Email'].includes(body.contact_method) ||
         !body.customer_name || !body.customer_contact || !body.subject || !body.message ||
         body.customer_name.length > 100 || body.customer_contact.length > 254 ||
-        body.subject.length > 160 || body.message.length > 3000 || !contactIsValid) {
+        body.subject.length > 160 || body.message.length > 3000 || serviceLocation.length > 180 || !contactIsValid) {
       return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>Please provide your name, enquiry details, and a WhatsApp number or email address.</h1><p><a href="/">Return to the website</a></p></body></html>', 400);
     }
+    const enquiryId = crypto.randomBytes(12).toString('hex');
+    const contactValue = String(body.customer_contact).slice(0, 254);
     await updateData((data) => {
       data.enquiries.push({
+        id: enquiryId,
         role: body.role,
         customer_name: body.customer_name.slice(0, 100),
         contact_method: body.contact_method,
-        customer_contact: body.customer_contact.slice(0, 254),
+        customer_contact: contactValue,
         subject: body.subject.slice(0, 160),
         message: body.message.slice(0, 3000),
+        service_location: serviceLocation,
+        location_source: body.location_source || 'manual',
         date: body.date || '',
-        budget: body.budget || '',
-        created_at: new Date().toISOString()
+        status: 'Received',
+        status_history: [{ status: 'Received', created_at: new Date().toISOString() }],
+        responses: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       });
     });
+    res.setHeader('Set-Cookie', `customerContact=${encodeURIComponent(contactValue)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000`);
     const profilePath = body.role === 'tailor' ? 'tailoring' : body.role;
     return redirect(res, `/${profilePath}.html?enquiry=sent#contact`);
   }
@@ -1320,6 +1640,103 @@ async function handleRequest(req, res) {
     return redirect(res, `/${profilePath}.html#work`);
   }
 
+  if (req.method === 'GET' && pathname === '/api/stats') {
+    const data = await loadData();
+    return sendJson(res, buildUsageStatistics(data));
+  }
+
+  if (req.method === 'GET' && pathname === '/api/customer-status') {
+    const cookie = parseCookies(req.headers.cookie);
+    const customerContact = (cookie.customerContact || url.searchParams.get('contact') || '').trim();
+    if (!customerContact) {
+      return sendJson(res, { welcome_back: false, existing_inquiries: [] });
+    }
+    const data = await loadData();
+    const matching = (data.enquiries || []).filter((item) => String(item.customer_contact || '').toLowerCase() === customerContact.toLowerCase());
+    const summary = matching.map((item) => ({
+      id: item.id,
+      role: item.role,
+      subject: item.subject,
+      status: item.status || 'Received',
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+      last_response: Array.isArray(item.responses) && item.responses.length ? item.responses[item.responses.length - 1] : null
+    }));
+    return sendJson(res, {
+      welcome_back: summary.length > 0,
+      existing_inquiries: summary,
+      latest_status: summary.length ? summary[summary.length - 1].status : null,
+      unread_messages: 0
+    });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/conversations') {
+    const session = await getSession(req);
+    const role = url.searchParams.get('role');
+    if (!roleNames[role] || !session || session.role !== role) {
+      return sendJson(res, { error: 'Unauthorized' }, 401);
+    }
+    const data = await loadData();
+    const filtered = (data.conversations || []).filter((conversation) => conversation.role === role).map((conversation) => buildConversationSummary(conversation, role));
+    return sendJson(res, { conversations: filtered });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/notifications') {
+    const session = await getSession(req);
+    const role = url.searchParams.get('role');
+    if (!roleNames[role] || !session || session.role !== role) {
+      if (roleNames[role]) await recordSecurityEvent(req, 'notification_access_denied', role);
+      return sendJson(res, { error: 'Unauthorized' }, 401);
+    }
+    const data = await loadData();
+    const pendingInquiries = (data.enquiries || []).filter((item) => item.role === role && (item.status || 'Received') === 'Received').length;
+    const unreadMessages = (data.conversations || [])
+      .filter((conversation) => conversation.role === role)
+      .reduce((total, conversation) => total + countUnreadMessages(conversation, role), 0);
+    return sendJson(res, {
+      pending_inquiries: pendingInquiries,
+      unread_messages: unreadMessages,
+      total: pendingInquiries + unreadMessages
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/conversation') {
+    if (!isSameOriginRequest(req)) {
+      return sendHtml(res, 'Request origin could not be verified. Please reload the page and try again.', 403);
+    }
+    const body = parseFormData(await readBody(req));
+    if (!roleNames[body.role] || !body.customer_name || !body.customer_contact || !body.message) {
+      return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>Please provide your name, contact details, and message to open a private conversation.</h1><p><a href="/">Return to the website</a></p></body></html>', 400);
+    }
+    const messageText = normalizeMessageText(body.message, 2000);
+    const inquiryId = body.inquiry_id || null;
+    await updateData((data) => {
+      const conversation = {
+        id: crypto.randomBytes(12).toString('hex'),
+        role: body.role,
+        inquiry_id: inquiryId,
+        customer_name: String(body.customer_name).slice(0, 80),
+        customer_contact: String(body.customer_contact).slice(0, 254),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        participants: [body.role, 'customer'],
+        messages: [{
+          id: crypto.randomBytes(8).toString('hex'),
+          sender: 'customer',
+          sender_name: String(body.customer_name).slice(0, 80),
+          sender_role: 'customer',
+          body: messageText,
+          created_at: new Date().toISOString(),
+          read_by: []
+        }],
+        unread_by: [body.role]
+      };
+      data.conversations.push(conversation);
+    });
+    const profilePath = body.role === 'tailor' ? 'tailoring' : body.role;
+    return redirect(res, `/${profilePath}.html?conversation=sent#contact`);
+  }
+
   if (req.method === 'POST' && pathname.startsWith('/dashboard/')) {
     const parts = pathname.split('/').filter(Boolean);
     const role = parts[1];
@@ -1329,13 +1746,130 @@ async function handleRequest(req, res) {
 
     const session = await getSession(req);
     if (!session || session.role !== role) {
+      await recordSecurityEvent(req, 'dashboard_access_denied', role);
       return redirect(res, '/login.html');
     }
     if (!isSameOriginRequest(req)) {
+      await recordSecurityEvent(req, 'dashboard_request_origin_rejected', role);
       return sendHtml(res, 'Request origin could not be verified. Reload the dashboard and try again.', 403);
     }
 
     const action = parts[2];
+    if (action === 'mark-read') {
+      const body = parseFormData(await readBody(req));
+      let updated = false;
+      await updateData((data) => {
+        const conversation = (data.conversations || []).find((item) => item.id === body.conversation_id && item.role === role);
+        if (!conversation) return;
+        updated = true;
+        conversation.messages = Array.isArray(conversation.messages) ? conversation.messages : [];
+        for (const message of conversation.messages) {
+          if (message.sender === role) continue;
+          message.read_by = Array.isArray(message.read_by) ? message.read_by : [];
+          if (!message.read_by.includes(role)) message.read_by.push(role);
+        }
+        conversation.unread_by = Array.isArray(conversation.unread_by)
+          ? conversation.unread_by.filter((entry) => entry !== role)
+          : [];
+      });
+      if (!updated) {
+        return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>That private conversation could not be found.</h1><p><a href="/dashboard.html?role=' + encodeURIComponent(role) + '">Return to your dashboard</a></p></body></html>', 404);
+      }
+      return redirect(res, `/dashboard.html?role=${encodeURIComponent(role)}#conversation-${encodeURIComponent(body.conversation_id)}`);
+    }
+
+    if (action === 'update-status') {
+      const body = parseFormData(await readBody(req));
+      const inquiryId = body.inquiry_id;
+      const status = ['Received', 'Under Review', 'Provider Responded', 'In Discussion', 'Agreed', 'Completed', 'Declined', 'Cancelled', 'Closed'].includes(body.status) ? body.status : 'Received';
+      let updated = false;
+      await updateData((data) => {
+        const enquiry = (data.enquiries || []).find((item) => item.id === inquiryId && item.role === role);
+        if (!enquiry) return;
+        updated = true;
+        enquiry.status = status;
+        enquiry.updated_at = new Date().toISOString();
+        enquiry.status_history = Array.isArray(enquiry.status_history) ? enquiry.status_history : [];
+        enquiry.status_history.push({ status, created_at: enquiry.updated_at, actor_role: role });
+      });
+      if (!updated) {
+        return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>That enquiry could not be found.</h1><p><a href="/dashboard.html?role=' + encodeURIComponent(role) + '">Return to your dashboard</a></p></body></html>', 404);
+      }
+      return redirect(res, `/dashboard.html?role=${encodeURIComponent(role)}`);
+    }
+
+    if (action === 'respond-enquiry') {
+      const body = parseFormData(await readBody(req));
+      const inquiryId = body.inquiry_id;
+      const response = normalizeMessageText(body.response || '', 2000);
+      if (!inquiryId || !response) {
+        return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>Write a message before sending a response.</h1><p><a href="/dashboard.html?role=' + encodeURIComponent(role) + '">Return to your dashboard</a></p></body></html>', 400);
+      }
+      let updated = false;
+      let duplicateFound = false;
+      await updateData((data) => {
+        const enquiry = (data.enquiries || []).find((item) => item.id === inquiryId && item.role === role);
+        if (!enquiry) return;
+        const duplicate = (enquiry.responses || []).some((entry) => entry.provider_role === role && entry.message === response);
+        if (duplicate) {
+          duplicateFound = true;
+          return;
+        }
+        enquiry.responses = Array.isArray(enquiry.responses) ? enquiry.responses : [];
+        enquiry.responses.push({
+          id: crypto.randomBytes(8).toString('hex'),
+          provider_role: role,
+          provider_name: roleNames[role],
+          message: response,
+          created_at: new Date().toISOString()
+        });
+        enquiry.status = 'Provider Responded';
+        enquiry.updated_at = new Date().toISOString();
+        enquiry.status_history = Array.isArray(enquiry.status_history) ? enquiry.status_history : [];
+        enquiry.status_history.push({ status: 'Provider Responded', created_at: enquiry.updated_at, actor_role: role });
+        updated = true;
+      });
+      if (duplicateFound) {
+        return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>A duplicate provider response was detected.</h1><p><a href="/dashboard.html?role=' + encodeURIComponent(role) + '">Return to your dashboard</a></p></body></html>', 409);
+      }
+      if (!updated) {
+        return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>That enquiry could not be found.</h1><p><a href="/dashboard.html?role=' + encodeURIComponent(role) + '">Return to your dashboard</a></p></body></html>', 404);
+      }
+      return redirect(res, `/dashboard.html?role=${encodeURIComponent(role)}`);
+    }
+
+    if (action === 'respond-message') {
+      const body = parseFormData(await readBody(req));
+      const conversationId = body.conversation_id;
+      const message = normalizeMessageText(body.message || '', 2000);
+      if (!conversationId || !message) {
+        return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>Write a message before replying.</h1><p><a href="/dashboard.html?role=' + encodeURIComponent(role) + '">Return to your dashboard</a></p></body></html>', 400);
+      }
+      let updated = false;
+      await updateData((data) => {
+        const conversation = (data.conversations || []).find((item) => item.id === conversationId && item.role === role);
+        if (!conversation) return;
+        const newMessage = {
+          id: crypto.randomBytes(8).toString('hex'),
+          sender: 'provider',
+          sender_name: roleNames[role],
+          sender_role: role,
+          body: message,
+          created_at: new Date().toISOString(),
+          read_by: [role]
+        };
+        conversation.messages = Array.isArray(conversation.messages) ? conversation.messages : [];
+        conversation.messages.push(newMessage);
+        conversation.updated_at = new Date().toISOString();
+        conversation.unread_by = Array.isArray(conversation.unread_by) ? conversation.unread_by.filter((entry) => entry !== role) : [];
+        updated = true;
+      });
+      if (!updated) {
+        return sendHtml(res, '<!DOCTYPE html><html lang="en"><body><h1>That private conversation could not be found.</h1><p><a href="/dashboard.html?role=' + encodeURIComponent(role) + '">Return to your dashboard</a></p></body></html>', 404);
+      }
+      return redirect(res, `/dashboard.html?role=${encodeURIComponent(role)}`);
+    }
+
     if (action === 'upload-profile' || action === 'upload-project') {
       let upload;
       try {
@@ -1434,6 +1968,7 @@ async function handleRequest(req, res) {
     }
     const session = await getSession(req);
     if (!session || session.role !== role) {
+      if (roleNames[role]) await recordSecurityEvent(req, 'dashboard_access_denied', role);
       return redirect(res, '/login.html');
     }
     return sendHtml(res, await renderDashboardPage(role));

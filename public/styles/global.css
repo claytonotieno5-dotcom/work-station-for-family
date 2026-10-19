@@ -157,16 +157,20 @@ section {
   justify-content: center;
   gap: 0.5rem;
   padding: 0.9rem 1.4rem;
-  border-radius: 999px;
-  border: 1px solid transparent;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(255, 226, 184, 0.24);
   font-weight: 600;
   letter-spacing: 0.01em;
   min-height: 2.9rem;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  box-shadow: 0 8px 20px rgba(15, 10, 6, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transform-origin: center;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .btn:hover, .btn:focus-visible {
-  transform: translateY(-1px);
+  transform: translateY(-2px) scale(1.04);
+  border-color: rgba(242, 191, 88, 0.78);
+  box-shadow: 0 14px 28px rgba(15, 10, 6, 0.3), 0 0 0 1px rgba(242, 191, 88, 0.12);
 }
 
 .btn-primary {
