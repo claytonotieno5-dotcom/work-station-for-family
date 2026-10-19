@@ -1,4 +1,3 @@
-const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -19,12 +18,11 @@ const publicDir = path.join(rootDir, 'public');
 const dataDir = resolveConfiguredPath(process.env.DATA_DIR, path.join(rootDir, 'data'));
 const uploadsDir = resolveConfiguredPath(process.env.UPLOAD_DIR, path.join(rootDir, 'uploads'));
 const dataFile = path.join(dataDir, 'site-data.json');
-const port = Number(process.env.PORT || 3000);
-const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const isProduction = process.env.NODE_ENV === 'production';
-const trustProxy = process.env.TRUST_PROXY === 'true';
-const storageProvider = String(process.env.STORAGE_PROVIDER || 'local').trim().toLowerCase();
-const maxImageBytes = process.env.VERCEL === '1' ? 4 * 1024 * 1024 : 8 * 1024 * 1024;
+const isVercel = process.env.VERCEL === '1';
+const trustProxy = process.env.TRUST_PROXY === 'true' || isVercel;
+const storageProvider = String(process.env.STORAGE_PROVIDER || (isVercel ? 'blob' : 'local')).trim().toLowerCase();
+const maxImageBytes = isVercel ? 4 * 1024 * 1024 : 8 * 1024 * 1024;
 const maxImageLabel = `${maxImageBytes / (1024 * 1024)} MB`;
 const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const pool = process.env.DATABASE_URL
@@ -42,12 +40,6 @@ const sessions = new Map();
 const loginAttempts = new Map();
 
 function validateRequiredEnvironment() {
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    const error = new Error('PORT must be an integer between 1 and 65535.');
-    error.code = 'CONFIGURATION';
-    throw error;
-  }
-
   if (!['local', 'blob'].includes(storageProvider)) {
     const error = new Error('STORAGE_PROVIDER must be either "local" or "blob".');
     error.code = 'CONFIGURATION';
@@ -63,8 +55,9 @@ function validateRequiredEnvironment() {
   if (process.env.SESSION_SECRET && String(process.env.SESSION_SECRET).length < 32) {
     missing.push('SESSION_SECRET (at least 32 characters)');
   }
-  if (storageProvider === 'blob' && !process.env.BLOB_READ_WRITE_TOKEN) {
-    missing.push('BLOB_READ_WRITE_TOKEN');
+  const hasBlobOidcCredentials = process.env.BLOB_STORE_ID && process.env.VERCEL_OIDC_TOKEN;
+  if (storageProvider === 'blob' && !process.env.BLOB_READ_WRITE_TOKEN && !(isVercel && hasBlobOidcCredentials)) {
+    missing.push('BLOB_READ_WRITE_TOKEN or Vercel Blob OIDC credentials (BLOB_STORE_ID and VERCEL_OIDC_TOKEN)');
   }
   if (storageProvider === 'local' && !process.env.UPLOAD_DIR) {
     missing.push('UPLOAD_DIR (persistent host volume path)');
@@ -77,10 +70,10 @@ function validateRequiredEnvironment() {
       missing.push('DATABASE_URL (must be a valid PostgreSQL connection URL)');
     }
   }
-  if (process.env.TRUST_PROXY !== 'true') {
+  if (!isVercel && process.env.TRUST_PROXY !== 'true') {
     missing.push('TRUST_PROXY=true (required behind the host HTTPS proxy)');
   }
-  if (process.env.VERCEL === '1' && storageProvider !== 'blob') {
+  if (isVercel && storageProvider !== 'blob') {
     const error = new Error('Vercel deployments require STORAGE_PROVIDER=blob and a BLOB_READ_WRITE_TOKEN.');
     error.code = 'CONFIGURATION';
     throw error;
@@ -1511,7 +1504,7 @@ async function handleRequest(req, res) {
   return sendHtml(res, '<!DOCTYPE html><html><body><h1>Page not found</h1></body></html>', 404);
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   try {
     return await handleRequest(req, res);
   } catch (error) {
@@ -1524,32 +1517,7 @@ module.exports = async function handler(req, res) {
       sendHtml(res, '<!DOCTYPE html><html><body><h1>Server error</h1></body></html>', 500);
     }
   }
-};
-
-if (require.main === module) {
-  let configurationValid = true;
-  try {
-    validateRequiredEnvironment();
-  } catch (error) {
-    console.error(error.message);
-    process.exitCode = 1;
-    configurationValid = false;
-  }
-
-  if (configurationValid) {
-    const server = http.createServer((req, res) => {
-      handleRequest(req, res).catch((error) => {
-        console.error('Request failed:', error.code || error.name || 'unknown error');
-        if (res.headersSent) {
-          res.destroy();
-        } else {
-          sendHtml(res, '<!DOCTYPE html><html><body><h1>Server error</h1></body></html>', 500);
-        }
-      });
-    });
-
-    server.listen(port, host, () => {
-      console.log(`Craft & Current running at http://${host}:${port}`);
-    });
-  }
 }
+
+handler.validateConfiguration = validateRequiredEnvironment;
+module.exports = handler;

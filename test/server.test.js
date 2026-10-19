@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const http = require('node:http');
+const { spawnSync } = require('node:child_process');
 const { after, before, test } = require('node:test');
 
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'craft-current-test-'));
@@ -10,6 +10,7 @@ process.env.NODE_ENV = 'test';
 process.env.DATA_DIR = path.join(temporaryDirectory, 'data');
 process.env.UPLOAD_DIR = path.join(temporaryDirectory, 'uploads');
 process.env.STORAGE_PROVIDER = 'local';
+process.env.VERCEL = '';
 process.env.DATABASE_URL = '';
 process.env.ELECTRICIAN_PASSWORD = 'test-electrician-password';
 process.env.TAILOR_PASSWORD = 'test-tailor-password';
@@ -17,12 +18,13 @@ process.env.DEVELOPER_PASSWORD = 'test-developer-password';
 process.env.SESSION_SECRET = 'test-session-secret-with-at-least-32-characters';
 process.env.TRUST_PROXY = 'false';
 
-const handler = require('../server.js');
-const server = http.createServer(handler);
+const app = require('../index.js');
+let server;
 let baseUrl;
 
 before(async () => {
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 
@@ -31,12 +33,12 @@ after(async () => {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });
 });
 
-test('serves site routes, assets, health checks, forms, and protected owner sessions', async () => {
+test('Express app serves site routes and preserves form, upload, and authentication behavior', async () => {
   const health = await fetch(`${baseUrl}/health`);
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { status: 'ok' });
 
-  for (const route of ['/', '/electrician.html', '/tailoring.html', '/developer.html', '/favicon.svg', '/styles/home.css']) {
+  for (const route of ['/', '/electrician.html', '/tailoring.html', '/developer.html', '/favicon.svg', '/styles/home.css', '/js/main.js', '/images/tailor-profile.svg']) {
     const response = await fetch(`${baseUrl}${route}`);
     assert.equal(response.status, 200, `${route} should load`);
   }
@@ -67,7 +69,8 @@ test('serves site routes, assets, health checks, forms, and protected owner sess
   });
   assert.equal(enquiry.status, 302);
   assert.match(enquiry.headers.get('location'), /enquiry=sent/);
-  const data = JSON.parse(fs.readFileSync(path.join(temporaryDirectory, 'data', 'site-data.json'), 'utf8'));
+  const dataFile = path.join(temporaryDirectory, 'data', 'site-data.json');
+  const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   assert.equal(data.enquiries.length, 1);
   assert.equal(data.enquiries[0].customer_name, 'Test Customer');
 
@@ -106,7 +109,7 @@ test('serves site routes, assets, health checks, forms, and protected owner sess
     redirect: 'manual'
   });
   assert.equal(upload.status, 302);
-  const updatedData = JSON.parse(fs.readFileSync(path.join(temporaryDirectory, 'data', 'site-data.json'), 'utf8'));
+  const updatedData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   const uploadedImage = updatedData.projects.electrician[0].image;
   assert.match(uploadedImage, /^\/uploads\/[a-f0-9]{32}\.png$/);
   const imageResponse = await fetch(`${baseUrl}${uploadedImage}`);
@@ -168,4 +171,56 @@ test('serves site routes, assets, health checks, forms, and protected owner sess
     redirect: 'manual'
   });
   assert.equal(rateLimitedLogin.status, 429);
+});
+
+test('Vercel production config requires database and Blob but not local upload or proxy settings', () => {
+  const result = spawnSync(process.execPath, ['-e', `
+    const handler = require('./server');
+    handler.validateConfiguration();
+  `], {
+    cwd: path.resolve(__dirname, '..'),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      VERCEL: '1',
+      SESSION_SECRET: 'test-session-secret-with-at-least-32-characters',
+      ELECTRICIAN_PASSWORD: 'test-electrician-password',
+      TAILOR_PASSWORD: 'test-tailor-password',
+      DEVELOPER_PASSWORD: 'test-developer-password',
+      DATABASE_URL: 'postgresql:' + '//test:test@localhost:5432/test',
+      BLOB_READ_WRITE_TOKEN: 'test-token',
+      STORAGE_PROVIDER: '',
+      UPLOAD_DIR: '',
+      TRUST_PROXY: ''
+    }
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('Vercel production config accepts managed Blob OIDC credentials without a static token', () => {
+  const result = spawnSync(process.execPath, ['-e', `
+    const handler = require('./server');
+    handler.validateConfiguration();
+  `], {
+    cwd: path.resolve(__dirname, '..'),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      VERCEL: '1',
+      SESSION_SECRET: 'test-session-secret-with-at-least-32-characters',
+      ELECTRICIAN_PASSWORD: 'test-electrician-password',
+      TAILOR_PASSWORD: 'test-tailor-password',
+      DEVELOPER_PASSWORD: 'test-developer-password',
+      DATABASE_URL: 'postgresql:' + '//test:test@localhost:5432/test',
+      BLOB_READ_WRITE_TOKEN: '',
+      BLOB_STORE_ID: 'test-store-id',
+      VERCEL_OIDC_TOKEN: 'test-managed-oidc-token',
+      STORAGE_PROVIDER: '',
+      UPLOAD_DIR: '',
+      TRUST_PROXY: ''
+    }
+  });
+  assert.equal(result.status, 0, result.stderr);
 });
